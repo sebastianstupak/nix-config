@@ -28,6 +28,12 @@ nix flake check
 # Format the whole tree (nixfmt-rfc-style, via treefmt)
 nix fmt
 
+# Dev shell: linters, formatter, lefthook, sops. Auto-loads via .envrc + direnv.
+nix develop
+deadnix .              # report dead/unused Nix code
+statix check           # lint Nix antipatterns
+lefthook run pre-commit   # run the git hooks manually (uses staged files)
+
 # Update dependencies — do this in ITS OWN commit (see below)
 nix flake update            # all inputs
 nix flake update nixpkgs    # a single input
@@ -63,6 +69,7 @@ version the *running system* — use both.
 flake.nix                     Entry point: inputs + nixosConfigurations + fmt/checks
 flake.lock                    Pinned inputs (committed)
 treefmt.nix                   nixfmt-rfc-style config for `nix fmt`
+lefthook.yml                  git hooks (nixfmt/deadnix/statix, flake check)
 .sops.yaml                    sops recipients + creation rules
 hosts/<host>/
   default.nix                 Per-machine system config; wires modules + home-manager
@@ -91,6 +98,24 @@ from the host's `home-manager.users.<name>`.
 - Comment *why*, not *what*: hardware quirks, workarounds, why an input is pinned.
   One header comment per module stating its purpose.
 - Keep modules small and single-purpose. If a file sprawls, split it.
+- `deadnix .` and `statix check` should be clean before committing (the hooks
+  enforce this on NixOS).
+
+## Linting & git hooks
+
+Hooks are managed by **lefthook** (`lefthook.yml`); the tools come from the dev
+shell (`flake.nix` → `devShells.default`).
+
+- **Wire them up (once, per machine):** `direnv allow` (nix-direnv, via `.envrc`)
+  or `nix develop` — the dev shell's `shellHook` runs `lefthook install`.
+- **pre-commit:** `nixfmt` (formats staged `*.nix`, restages), `deadnix --fail`,
+  `statix check`. **pre-push:** `nix flake check`.
+- Each job is **guarded** — it no-ops (exit 0) when its tool isn't on PATH (e.g. a
+  Windows checkout without Nix), so hooks never block a commit off-NixOS. When the
+  tool is present, its real failure blocks the commit/push.
+- **Editing `lefthook.yml`:** keep every `run:` a single line with **no embedded
+  quotes** — lefthook's Windows arg-parser mangles quoted/multiline commands.
+- **Bypass once:** `LEFTHOOK=0 git commit …` or `git commit --no-verify`.
 
 ## Commit & PR conventions
 

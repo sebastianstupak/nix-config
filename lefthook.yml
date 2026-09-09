@@ -1,0 +1,38 @@
+# Git hooks for this NixOS config, managed by lefthook (https://lefthook.dev).
+#
+# The Nix tools below come from the dev shell (see flake.nix). Wire the hooks on
+# a machine with:  direnv allow   (nix-direnv)  or  nix develop  — the dev shell's
+# shellHook runs `lefthook install` for you.
+#
+# Each job is GUARDED (`if command -v <tool>`): when the tool is absent — e.g. a
+# Windows checkout with no Nix — the job prints a skip note and exits 0, so it
+# never blocks a commit off-NixOS. When the tool IS present, the tool's real exit
+# code propagates and a failure blocks the commit/push.
+#
+# NOTE: keep each `run` a single line with NO embedded quotes — lefthook's Windows
+# arg-parser mangles quoted/multiline commands (learned the hard way).
+#
+# Bypass once:  LEFTHOOK=0 git commit ...    or    git commit --no-verify
+
+# Sequential on purpose: nixfmt rewrites/stages files, then deadnix + statix lint
+# the formatted result (no read/write race).
+pre-commit:
+  jobs:
+    - name: nixfmt
+      glob: "*.nix"
+      stage_fixed: true
+      run: if command -v nixfmt >/dev/null 2>&1; then nixfmt {staged_files}; else echo skip-nixfmt-not-in-devshell; fi
+
+    - name: deadnix
+      glob: "*.nix"
+      run: if command -v deadnix >/dev/null 2>&1; then deadnix --fail {staged_files}; else echo skip-deadnix; fi
+
+    - name: statix
+      glob: "*.nix"
+      run: if command -v statix >/dev/null 2>&1; then statix check; else echo skip-statix; fi
+
+# Heavier full-evaluation gate — runs on push, not on every commit.
+pre-push:
+  jobs:
+    - name: flake-check
+      run: if command -v nix >/dev/null 2>&1; then nix flake check; else echo skip-flake-check-no-nix; fi

@@ -38,6 +38,13 @@ nix flake update                                   # update inputs (own commit!)
 sudo nixos-rebuild switch --rollback               # undo a bad switch
 ```
 
+### Dev shell & git hooks
+
+`direnv allow` (or `nix develop`) loads the linters, formatter, `lefthook`, and
+`sops`, and installs the git hooks: **nixfmt / deadnix / statix** on commit and
+**`nix flake check`** on push. The hooks no-op on machines without Nix, so a
+Windows checkout is never blocked. Bypass once with `LEFTHOOK=0 git commit …`.
+
 ## Layout
 
 | Path | Purpose |
@@ -47,6 +54,7 @@ sudo nixos-rebuild switch --rollback               # undo a bad switch
 | `modules/nixos/` | Reusable system modules |
 | `modules/home/` | Reusable home-manager modules |
 | `home/<user>/` | Per-user home-manager config |
+| `lefthook.yml` | Git hooks: lint / format / validate (see [AGENTS.md](./AGENTS.md)) |
 | `secrets/` | Encrypted secrets (see [`secrets/README.md`](./secrets/README.md)) |
 
 See **[AGENTS.md](./AGENTS.md)** for the full conventions, rules, and the

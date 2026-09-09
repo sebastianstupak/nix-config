@@ -61,5 +61,24 @@
 
       # `nix flake check` runs this (verifies everything is formatted).
       checks.${system}.formatting = treefmtEval.config.build.check self;
+
+      # `nix develop` (or `direnv allow` via .envrc) — dev tooling for this repo:
+      # the Nix linters/formatter, lefthook, and the secrets CLIs. The shellHook
+      # wires the git hooks on this machine (idempotent, no-op without git/lefthook).
+      devShells.${system}.default = pkgs.mkShell {
+        packages = with pkgs; [
+          nixfmt-rfc-style # formatter (matches treefmt.nix / `nix fmt`)
+          deadnix # find dead/unused Nix code
+          statix # lint Nix antipatterns
+          lefthook # git hooks runner
+          sops # edit encrypted secrets
+          ssh-to-age # derive age keys from SSH keys
+        ];
+        shellHook = ''
+          if command -v lefthook >/dev/null 2>&1 && [ -e .git ]; then
+            lefthook install >/dev/null 2>&1 || true
+          fi
+        '';
+      };
     };
 }

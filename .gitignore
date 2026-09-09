@@ -1,0 +1,13 @@
+# Deliberately minimal: in a flake repo, anything ignored here is ALSO invisible
+# to `nix build`/`nixos-rebuild`. Never ignore *.nix, flake.lock, or hardware
+# configs. See AGENTS.md ("The git gotcha").
+
+# nixos-rebuild / nix build output symlinks
+result
+result-*
+
+# nix-direnv cache
+.direnv/
+
+# VM images from `nixos-rebuild build-vm`
+*.qcow2

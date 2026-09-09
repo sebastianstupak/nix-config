@@ -1,0 +1,5 @@
+# This repo is edited on Windows but built on NixOS. Force LF so shell scripts
+# and Nix files never get CRLF line endings that break on Linux.
+* text=auto eol=lf
+*.nix text eol=lf
+*.sh  text eol=lf

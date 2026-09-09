@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#
+# Repo commit-msg hook. Active via `core.hooksPath=.githooks` (set by the dev
+# shell on NixOS, and once manually on other checkouts). Runs everywhere bash
+# runs — Windows Git Bash and NixOS alike.
+set -euo pipefail
+
+msg_file="$1"
+
+# This repo overrides the machine's global core.hooksPath, so mirror the
+# machine-wide guard that rejects AI co-author trailers.
+if grep -qiE 'co-authored-by:[[:space:]]*.*(claude|anthropic)|generated with[[:space:]]+.*claude|claude-session:' "$msg_file"; then
+  echo "AI co-author trailers are not allowed (Claude / Anthropic)." >&2
+  echo "Remove those lines before committing." >&2
+  exit 1
+fi
+
+root="$(git rev-parse --show-toplevel)"
+exec bash "$root/scripts/commit-msg.sh" "$msg_file"

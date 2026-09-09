@@ -69,7 +69,10 @@ version the *running system* — use both.
 flake.nix                     Entry point: inputs + nixosConfigurations + fmt/checks
 flake.lock                    Pinned inputs (committed)
 treefmt.nix                   nixfmt-rfc-style config for `nix fmt`
-lefthook.yml                  git hooks (nixfmt/deadnix/statix, flake check)
+lefthook.yml                  pre-commit/pre-push linters (nixfmt/deadnix/statix, flake check)
+statix.toml                   statix lint config (ignores generated hardware configs)
+.githooks/                    committed git hooks (commit-msg, pre-commit, pre-push)
+scripts/                      helper scripts (commit-msg.sh: Conventional Commits check)
 .sops.yaml                    sops recipients + creation rules
 hosts/<host>/
   default.nix                 Per-machine system config; wires modules + home-manager
@@ -103,26 +106,42 @@ from the host's `home-manager.users.<name>`.
 
 ## Linting & git hooks
 
-Hooks are managed by **lefthook** (`lefthook.yml`); the tools come from the dev
-shell (`flake.nix` → `devShells.default`).
+Hooks are **committed** in `.githooks/` and activated with a repo-local
+`core.hooksPath` (so they run identically on Windows and NixOS, independent of any
+global git-hook setup). The Nix tools come from the dev shell (`flake.nix` →
+`devShells.default`).
 
-- **Wire them up (once, per machine):** `direnv allow` (nix-direnv, via `.envrc`)
-  or `nix develop` — the dev shell's `shellHook` runs `lefthook install`.
-- **pre-commit:** `nixfmt` (formats staged `*.nix`, restages), `deadnix --fail`,
-  `statix check`. **pre-push:** `nix flake check`.
-- Each job is **guarded** — it no-ops (exit 0) when its tool isn't on PATH (e.g. a
-  Windows checkout without Nix), so hooks never block a commit off-NixOS. When the
-  tool is present, its real failure blocks the commit/push.
+- **Wire them up (once, per checkout):** `direnv allow` (nix-direnv, via `.envrc`)
+  or `nix develop` — the dev shell's `shellHook` runs `git config core.hooksPath
+  .githooks`. Off-Nix (e.g. Windows) run that one command manually.
+- **commit-msg:** rejects AI co-author trailers, then enforces Conventional
+  Commits via `scripts/commit-msg.sh` (pure bash — always runs). See below.
+- **pre-commit** → lefthook: `nixfmt` (formats staged `*.nix`, restages),
+  `deadnix --fail`, `statix check`. **pre-push** → lefthook: `nix flake check`.
+- Each lefthook job is **guarded** — it no-ops (exit 0) when its tool isn't on
+  PATH (e.g. a Windows checkout without Nix), so hooks never block a commit
+  off-NixOS. When the tool is present, its real failure blocks the commit/push.
 - **Editing `lefthook.yml`:** keep every `run:` a single line with **no embedded
   quotes** — lefthook's Windows arg-parser mangles quoted/multiline commands.
-- **Bypass once:** `LEFTHOOK=0 git commit …` or `git commit --no-verify`.
+- **Bypass once:** `git commit --no-verify` (or `LEFTHOOK=0` to skip only lefthook).
 
 ## Commit & PR conventions
 
+Commit messages follow **Conventional Commits** (enforced by the commit-msg hook):
+
+```
+<type>(<optional-scope>)<optional-!>: <description>
+```
+
+- **types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
+  `ci`, `chore`, `revert`. `!` marks a breaking change. Subject ≤ 72 chars.
+- **scope** is optional; use the area touched — e.g. `(home)`, `(workstation)`,
+  `(modules/nixos)`, `(secrets)`, `(flake)`.
+- Examples: `feat(home): add zsh with starship prompt` ·
+  `fix(workstation): correct EFI mount point` · `chore: nix flake update`.
 - Small, atomic commits; one logical change each. Commit **before** you `switch`
   so a good generation maps to a known commit.
-- Imperative subject lines (`add pipewire config`, `pin nixpkgs to …`).
-- Lockfile bumps are standalone commits (rule 4).
+- Lockfile bumps are standalone commits (rule 4) — e.g. `chore: nix flake update`.
 - Solo workflow: a branch + `nixos-rebuild build` + `nix flake check`, then merge
   to `main`, is encouraged for anything risky.
 

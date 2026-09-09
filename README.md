@@ -41,9 +41,19 @@ sudo nixos-rebuild switch --rollback               # undo a bad switch
 ### Dev shell & git hooks
 
 `direnv allow` (or `nix develop`) loads the linters, formatter, `lefthook`, and
-`sops`, and installs the git hooks: **nixfmt / deadnix / statix** on commit and
-**`nix flake check`** on push. The hooks no-op on machines without Nix, so a
-Windows checkout is never blocked. Bypass once with `LEFTHOOK=0 git commit …`.
+`sops`, and activates the committed hooks (`git config core.hooksPath .githooks`):
+
+- **commit-msg** — Conventional Commits (runs everywhere; see below).
+- **pre-commit** — nixfmt / deadnix / statix on staged `*.nix`.
+- **pre-push** — `nix flake check`.
+
+The Nix linters no-op where Nix isn't installed, so a Windows checkout is never
+blocked; the commit-msg check runs everywhere. Bypass once with
+`git commit --no-verify`.
+
+Commit messages follow **Conventional Commits** — `type(scope): description`
+(types: `feat`, `fix`, `docs`, `refactor`, `chore`, `ci`, …). E.g.
+`feat(home): add zsh with starship prompt`.
 
 ## Layout
 
@@ -54,7 +64,8 @@ Windows checkout is never blocked. Bypass once with `LEFTHOOK=0 git commit …`.
 | `modules/nixos/` | Reusable system modules |
 | `modules/home/` | Reusable home-manager modules |
 | `home/<user>/` | Per-user home-manager config |
-| `lefthook.yml` | Git hooks: lint / format / validate (see [AGENTS.md](./AGENTS.md)) |
+| `.githooks/` + `scripts/` | Committed git hooks + the Conventional Commits check |
+| `lefthook.yml` | pre-commit / pre-push linters (see [AGENTS.md](./AGENTS.md)) |
 | `secrets/` | Encrypted secrets (see [`secrets/README.md`](./secrets/README.md)) |
 
 See **[AGENTS.md](./AGENTS.md)** for the full conventions, rules, and the

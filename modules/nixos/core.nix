@@ -1,20 +1,22 @@
 # Core system settings shared by every host: Nix daemon, flakes, GC, secrets, base tools.
 { pkgs, ... }:
 {
-  # Enable flakes + the new CLI declaratively, so the system agrees with how this
-  # repo is built.
-  nix.settings.experimental-features = [
-    "nix-command"
-    "flakes"
-  ];
+  nix = {
+    # Enable flakes + the new CLI declaratively, so the system agrees with how
+    # this repo is built.
+    settings.experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
 
-  # Keep the store from growing without bound.
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
+    # Keep the store from growing without bound.
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 30d";
+    };
+    optimise.automatic = true;
   };
-  nix.optimise.automatic = true;
 
   # Some firmware/drivers are unfree. Comment out to stay fully free.
   nixpkgs.config.allowUnfree = true;

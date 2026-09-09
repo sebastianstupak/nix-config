@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# Delegates linting to lefthook (see lefthook.yml). Soft-skips when lefthook
+# isn't on PATH so a checkout without the dev shell is never blocked.
+# --no-auto-install keeps lefthook from rewriting these committed hooks.
+set -euo pipefail
+
+if command -v lefthook >/dev/null 2>&1; then
+  exec lefthook run --no-auto-install pre-commit "$@"
+fi
+
+echo "lefthook not found on PATH — skipping pre-commit linters (enter the dev shell)."
+exit 0

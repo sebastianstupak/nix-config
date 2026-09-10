@@ -10,6 +10,7 @@
     ./office.nix
     ./proton.nix
     ./media.nix
+    ./comms.nix
     ./git.nix
     ./dev.nix
     ./hyprland.nix

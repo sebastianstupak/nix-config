@@ -5,5 +5,8 @@
   home.packages = with pkgs; [
     spotify
     playerctl
+    mpv # video player
+    imv # image viewer (Wayland)
+    obs-studio # screen recording / streaming
   ];
 }

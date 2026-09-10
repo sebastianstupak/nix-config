@@ -1,6 +1,6 @@
 # System configuration for host "workstation" (HP laptop, daily driver).
 # Composes: this host's hardware + the shared NixOS modules + home-manager.
-{ inputs, ... }:
+{ inputs, pkgs, ... }:
 {
   imports = [
     ./hardware-configuration.nix
@@ -17,9 +17,12 @@
   users.users.sebastianstupak = {
     isNormalUser = true;
     description = "Sebastian Stupak";
+    shell = pkgs.zsh;
     extraGroups = [
       "wheel" # sudo
       "networkmanager"
+      "video" # backlight control
+      "audio"
     ];
   };
 

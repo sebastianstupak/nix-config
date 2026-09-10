@@ -21,6 +21,9 @@
   # Some firmware/drivers are unfree. Comment out to stay fully free.
   nixpkgs.config.allowUnfree = true;
 
+  # Make zsh a valid login shell system-wide (configured per-user in home/).
+  programs.zsh.enable = true;
+
   # --- Secrets (sops-nix) -------------------------------------------------
   # The age key used to decrypt secrets is derived from this host's SSH host key.
   # No secrets are declared yet, so this is currently a no-op. To add one, see

@@ -1,12 +1,15 @@
 # statix configuration (https://github.com/oppiliappan/statix)
 
-# `nixos-generate-config` emits repeated `boot.*` / `fileSystems.*` keys, so its
-# generated hardware configs would always trip the repeated-keys lint. Exclude
-# them rather than hand-editing machine-generated files.
+# Don't lint machine-generated files.
 ignore = ["**/hardware-configuration.nix"]
 
 disabled = [
   # `{ ... }:` is the idiomatic NixOS / home-manager module header even when a
   # module currently takes no arguments — keep it rather than switching to `_:`.
   "empty_pattern",
+
+  # Dotted option paths (`services.foo.enable`, `programs.bar.enable`) are the
+  # core NixOS idiom; collapsing every shared prefix into one nested attrset
+  # hurts readability, so don't flag repeated top-level keys.
+  "repeated_keys",
 ]

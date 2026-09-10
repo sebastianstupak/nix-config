@@ -4,7 +4,10 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ../../modules/nixos
+    ../../modules/nixos # baseline (core)
+    ../../modules/nixos/desktop.nix # Hyprland graphical session
+    ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
+    ../../modules/nixos/containers.nix # docker
   ];
 
   networking.hostName = "workstation";
@@ -23,6 +26,7 @@
       "networkmanager"
       "video" # backlight control
       "audio"
+      "docker"
     ];
   };
 

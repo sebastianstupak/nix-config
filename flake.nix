@@ -40,20 +40,28 @@
 
       # nixfmt-rfc-style via treefmt (see treefmt.nix).
       treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
+
+      # Build a NixOS system from a host module. Shared modules (home-manager,
+      # sops-nix) are wired in once here, and `inputs` is threaded to every
+      # module via specialArgs. Add a machine by dropping a hosts/<name>/ dir
+      # and one line under nixosConfigurations below.
+      mkHost =
+        hostModule:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            hostModule
+            home-manager.nixosModules.home-manager
+            sops-nix.nixosModules.sops
+          ];
+        };
     in
     {
-      # One machine for now. Add more hosts under hosts/<name>/ and give each its
-      # own attribute here. Build with: nixos-rebuild switch --flake .#workstation
-      nixosConfigurations.workstation = nixpkgs.lib.nixosSystem {
-        inherit system;
-        # `inputs` is threaded to every module via specialArgs so modules can
-        # reference flake inputs without importing the flake.
-        specialArgs = { inherit inputs; };
-        modules = [
-          ./hosts/workstation
-          home-manager.nixosModules.home-manager
-          sops-nix.nixosModules.sops
-        ];
+      nixosConfigurations = {
+        # nixos-rebuild switch --flake .#workstation
+        workstation = mkHost ./hosts/workstation;
+        # add more machines here, e.g.:  desktop = mkHost ./hosts/desktop;
       };
 
       # `nix fmt` — format the whole tree with nixfmt-rfc-style.

@@ -16,6 +16,7 @@
     ./dev.nix
     ./hyprland.nix
     ./waybar.nix
+    ./calendar.nix
     ./mono-icons.nix
   ];
 

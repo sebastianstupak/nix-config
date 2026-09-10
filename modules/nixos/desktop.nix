@@ -51,6 +51,22 @@
     extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
   };
 
+  # Calendar/contacts backend for GNOME Calendar (modules/home/calendar.nix).
+  # The app itself is a home package, but everything it reads goes through
+  # D-Bus-activated evolution-data-server services — without this option there
+  # is no source registry to activate and it opens with no calendars at all.
+  #
+  # `plugins` is left at its default [], which keeps this to EDS alone: the
+  # option installs `evolutionWithPlugins` and that is a symlinkJoin of
+  # evolution-data-server plus whatever is listed, so the Evolution mail client
+  # only appears if you ask for it (or set programs.evolution.enable).
+  #
+  # Don't be alarmed by the toolkit mismatch — gnome-calendar builds against
+  # evolution-data-server-gtk4 while this ships the gtk3 build. Same EDS
+  # version and same D-Bus interfaces; the toolkit only decides what draws
+  # credential prompts, and the module offers no way to select the gtk4 one.
+  services.gnome.evolution-data-server.enable = true;
+
   # Audio via PipeWire (replaces PulseAudio).
   services.pulseaudio.enable = false;
   security.rtkit.enable = true;

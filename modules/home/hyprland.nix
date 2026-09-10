@@ -29,7 +29,18 @@
       exec-once = [
         "mako"
         "hypridle"
-        "nm-applet --indicator"
+        # No nm-applet: it existed only for its tray icon, which duplicated
+        # waybar's own `network` module (two network indicators side by side).
+        # It was also NetworkManager's secret agent (D-Bus name
+        # org.freedesktop.network-manager-applet), so joining a NEW wifi network
+        # now goes through nmtui, which registers its own agent and prompts for
+        # the password itself. Wired to right-click on the network module.
+        # blueman-applet stays, but with its tray icon switched off (see
+        # dconf.settings below) — waybar's own `bluetooth` module covers the
+        # status, and the two side by side was the duplicate. Unlike nm-applet
+        # this one cannot simply be dropped: blueman's pairing agent lives in
+        # blueman/main/applet/BluezAgent.py, so killing the applet takes the
+        # PIN/confirm dialogs with it and blueman-manager registers no agent.
         "blueman-applet"
         "wl-paste --watch cliphist store" # clipboard history daemon
         "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"
@@ -140,9 +151,16 @@
       ];
 
       # repeatable audio / brightness keys
+      #
+      # `-l 1.0` caps the result at 100%. Without it wpctl has NO upper bound and
+      # happily amplifies past unity — measured: from 0.98, three 5%+ steps land
+      # on 1.15, which is software gain and clips. The limit applies to the
+      # down-step too, so a sink already left above 100% snaps back to 1.0 on the
+      # first press instead of creeping down through 1.10, 1.05, ...
+      # The lower end needs nothing: wpctl already clamps at 0.00.
       bindel = [
-        ", XF86AudioRaiseVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
-        ", XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+        ", XF86AudioRaiseVolume, exec, wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"
+        ", XF86AudioLowerVolume, exec, wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%-"
         ", XF86AudioMute, exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
         ", XF86MonBrightnessUp, exec, brightnessctl set 5%+"
         ", XF86MonBrightnessDown, exec, brightnessctl set 5%-"
@@ -232,9 +250,24 @@
     cliphist # clipboard history
     wlogout # power menu
     pavucontrol # audio device / volume GUI
-    networkmanagerapplet # nm-applet
+    networkmanagerapplet # nm-connection-editor (nm-applet itself is unused now)
     nautilus # file manager
     polkit_gnome # authentication agent
+  ];
+
+  # Drop blueman-applet's tray icon so bluetooth is shown once, by waybar's
+  # `bluetooth` module, instead of twice. A leading "!" is how blueman's
+  # PersistentPluginManager marks a plugin disabled (main/PluginManager.py:
+  # `return "!" + plugin in plugins`).
+  #
+  # StatusIcon is the plugin that owns the visible icon and StatusNotifierItem is
+  # the SNI implementation it uses; both go. This is safe to unload — both
+  # inherit BasePlugin's `__unloadable__ = True`, the only plugin depending on
+  # StatusIcon is ShowConnected (which merely restyles that same icon), and
+  # AuthAgent declares no dependency on it, so pairing prompts keep working.
+  dconf.settings."org/blueman/general".plugin-list = [
+    "!StatusIcon"
+    "!StatusNotifierItem"
   ];
 
   # Hint Electron/Chromium apps to run natively on Wayland.

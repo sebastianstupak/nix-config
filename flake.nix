@@ -107,6 +107,18 @@
               } --verify-config
               touch $out
             '';
+
+        # Same idea for the launcher: fuzzel rejects unknown keys and malformed
+        # colors, so validate the generated fuzzel.ini instead of finding out
+        # when $mod+R silently does nothing.
+        fuzzel-config = pkgs.runCommand "fuzzel-check-config" { nativeBuildInputs = [ pkgs.fuzzel ]; } ''
+          export HOME="$TMPDIR"
+          export XDG_RUNTIME_DIR="$TMPDIR"
+          fuzzel --config ${
+            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."fuzzel/fuzzel.ini".source
+          } --check-config
+          touch $out
+        '';
       };
 
       # `nix develop` (or `direnv allow` via .envrc) — dev tooling for this repo:

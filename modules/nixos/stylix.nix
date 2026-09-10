@@ -42,6 +42,19 @@
       size = 24;
     };
 
+    # Icon theme. Needed for app icons in the launcher (fuzzel reads
+    # `icon-theme`, which Stylix only sets when this block is enabled — with it
+    # off, icon lookup falls back to bare hicolor and renders almost nothing).
+    # Adwaita over Papirus deliberately: Adwaita is 13 MiB and already in the
+    # closure via nautilus, whereas papirus-icon-theme drags in ~1 GiB because
+    # it symlinks breeze-icons.
+    icons = {
+      enable = true;
+      package = pkgs.adwaita-icon-theme;
+      dark = "Adwaita";
+      light = "Adwaita";
+    };
+
     fonts = {
       monospace = {
         package = pkgs.nerd-fonts.jetbrains-mono;

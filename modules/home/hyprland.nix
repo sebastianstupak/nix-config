@@ -19,7 +19,7 @@
     settings = {
       "$mod" = "SUPER";
       "$terminal" = "ghostty";
-      "$menu" = "wofi --show drun";
+      "$menu" = "fuzzel";
 
       monitor = ",preferred,auto,1";
 
@@ -76,21 +76,22 @@
         "$mod, Return, exec, $terminal"
         "$mod, Q, killactive"
         "$mod, E, exec, nautilus"
-        # Toggle, not just launch: wofi has no single-instance flag, so pressing
-        # $mod+R twice would stack a second launcher on top of the first. pkill
-        # exits 1 when nothing matched (-> open it), 0 when it killed one
+        # Toggle, not just launch: fuzzel has no single-instance lock, so
+        # pressing $mod+R twice would stack a second launcher on the first.
+        # pkill exits 1 when nothing matched (-> open it), 0 when it killed one
         # (-> stays closed). Hyprland runs exec through sh -c, so `||` works.
-        # Deliberately NOT `pkill -x wofi`: on NixOS the running process is
-        # `.wofi-wrapped` (Nix's wrapper), so an exact match finds NOTHING and
-        # the toggle silently degrades back to stacking instances. The substring
-        # match catches both the wrapped and unwrapped names. Keep the pattern
-        # short — procps matches against comm, which is capped at 15 chars.
-        "$mod, R, exec, pkill wofi || $menu"
+        # Substring match rather than `pkill -x`: fuzzel happens to be an
+        # unwrapped ELF today (comm is exactly `fuzzel`, so -x would work), but
+        # wofi here was `.wofi-wrapped` and an exact match found NOTHING —
+        # the toggle silently degraded back to stacking. Not worth re-learning
+        # if this ever gains a wrapper. Keep the pattern short: procps matches
+        # against comm, which is capped at 15 chars.
+        "$mod, R, exec, pkill fuzzel || $menu"
         "$mod, V, togglefloating"
         "$mod, F, fullscreen"
         "$mod, L, exec, hyprlock"
         "$mod SHIFT, X, exec, wlogout" # power menu
-        "$mod, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
+        "$mod, C, exec, cliphist list | fuzzel --dmenu | cliphist decode | wl-copy" # clipboard history
 
         # focus movement
         "$mod, left, movefocus, l"
@@ -138,7 +139,37 @@
   # Bar, notifications, launcher, screen lock, idle daemon.
   programs.waybar.enable = true;
   services.mako.enable = true;
-  programs.wofi.enable = true;
+  # Launcher. fuzzel over wofi: Wayland-native rather than GTK3, renders app
+  # icons properly, and has a far richer Stylix target (11 color roles vs
+  # wofi's 4) so it actually inherits the scheme instead of looking unstyled.
+  # Stylix owns `main.font`, `main.icon-theme` and the whole [colors] section —
+  # do NOT set those here. Stylix's mkTarget uses mkIf/mkMerge, not mkDefault,
+  # so redefining them is a module-system conflict, not an override.
+  programs.fuzzel = {
+    enable = true;
+    settings = {
+      main = {
+        # Geometry: `width` is in characters, the pads in pixels. wofi's stylix
+        # target set none of this, which is why it rendered edge-to-edge.
+        width = 45;
+        lines = 12;
+        horizontal-pad = 24;
+        vertical-pad = 16;
+        inner-pad = 10;
+        line-height = 24;
+        icons-enabled = true;
+        # Needed by `--dmenu`-less modes that launch terminal apps.
+        terminal = "ghostty -e";
+        # Above fullscreen windows, so $mod+R works over a maximized app.
+        layer = "overlay";
+      };
+      # Rounded to match decoration.rounding; layer surfaces don't inherit it.
+      border = {
+        radius = 12;
+        width = 2;
+      };
+    };
+  };
   programs.hyprlock.enable = true;
   services.hypridle = {
     enable = true;

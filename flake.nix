@@ -119,6 +119,64 @@
           } --check-config
           touch $out
         '';
+
+        # Waybar has no --verify-config equivalent (see `waybar --help`), and its
+        # config is generated from Nix so it is JSON-valid by construction. The
+        # part that can actually break is the hand-written CSS in
+        # modules/home/waybar.nix: GTK does not abort on a bad rule, it logs to
+        # stderr and skips it, so a typo silently drops styling rather than
+        # failing. This runs the same GTK3 parser waybar itself uses and treats
+        # any parsing-error as fatal.
+        #
+        # Built as a 20-line C program rather than via PyGObject on purpose: the
+        # introspection route needs Gtk-3.0 plus a transitive typelib chain
+        # (gdk-pixbuf, pango, atk, and xlib-2.0 from xorgproto) wired through
+        # GI_TYPELIB_PATH, while linking gtk3 directly needs nothing but gtk3 —
+        # which is already in the closure as a waybar dependency.
+        waybar-style =
+          pkgs.runCommand "waybar-check-style"
+            {
+              nativeBuildInputs = [
+                pkgs.pkg-config
+                pkgs.gcc
+              ];
+              buildInputs = [ pkgs.gtk3 ];
+            }
+            ''
+              cat > cssck.c <<'EOF'
+              #include <gtk/gtk.h>
+              static int failed = 0;
+              static void on_err(GtkCssProvider *p, GtkCssSection *s, GError *e, gpointer d) {
+                (void)p; (void)d;
+                g_printerr("CSS error at line %u: %s\n",
+                           gtk_css_section_get_start_line(s) + 1, e->message);
+                failed = 1;
+              }
+              int main(int argc, char **argv) {
+                if (argc < 2) return 2;
+                GtkCssProvider *p = gtk_css_provider_new();
+                g_signal_connect(p, "parsing-error", G_CALLBACK(on_err), NULL);
+                GError *err = NULL;
+                gtk_css_provider_load_from_path(p, argv[1], &err);
+                if (err) { g_printerr("load failed: %s\n", err->message); failed = 1; }
+                return failed;
+              }
+              EOF
+              gcc cssck.c -o cssck $(pkg-config --cflags --libs gtk+-3.0)
+
+              # Prove the checker has teeth before trusting its verdict — an
+              # always-passing check is worse than none.
+              echo '#x { color: ; }' > bad.css
+              if ./cssck bad.css; then
+                echo "cssck accepted invalid CSS; the check is broken" >&2
+                exit 1
+              fi
+
+              ./cssck ${
+                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/style.css".source
+              }
+              touch $out
+            '';
       };
 
       # `nix develop` (or `direnv allow` via .envrc) — dev tooling for this repo:

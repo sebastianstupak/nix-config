@@ -15,6 +15,7 @@
     ./security.nix
     ./dev.nix
     ./hyprland.nix
+    ./waybar.nix
     ./mono-icons.nix
   ];
 

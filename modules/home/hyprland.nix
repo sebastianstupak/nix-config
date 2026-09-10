@@ -23,8 +23,10 @@
 
       monitor = ",preferred,auto,1";
 
+      # No waybar here: it runs as a systemd user unit (modules/home/waybar.nix),
+      # started by graphical-session.target. Launching it here too would give you
+      # two bars.
       exec-once = [
-        "waybar"
         "mako"
         "hypridle"
         "nm-applet --indicator"
@@ -97,6 +99,14 @@
         "$mod SHIFT, X, exec, wlogout" # power menu
         "$mod, C, exec, cliphist list | fuzzel --dmenu | cliphist decode | wl-copy" # clipboard history
 
+        # Waybar signals: USR1 toggles the bar, USR2 reloads config + CSS in
+        # place (so you can iterate on waybar.nix without a full switch).
+        # Plain `pkill waybar`, NOT `pkill -x`: waybar is a wrapped binary, so
+        # its comm is `.waybar-wrapped` — an exact match finds nothing. Same
+        # trap as fuzzel above; it happens to fit in comm's 15-char cap exactly.
+        "$mod, B, exec, pkill -SIGUSR1 waybar"
+        "$mod SHIFT, B, exec, pkill -SIGUSR2 waybar"
+
         # focus movement
         "$mod, left, movefocus, l"
         "$mod, right, movefocus, r"
@@ -138,8 +148,8 @@
     };
   };
 
-  # Bar, notifications, launcher, screen lock, idle daemon.
-  programs.waybar.enable = true;
+  # Notifications, launcher, screen lock, idle daemon. The bar lives in
+  # modules/home/waybar.nix.
   services.mako.enable = true;
   # Launcher. fuzzel over wofi: Wayland-native rather than GTK3, renders app
   # icons properly, and has a far richer Stylix target (11 color roles vs

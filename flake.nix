@@ -93,15 +93,13 @@
         # verifies everything is formatted
         formatting = treefmtEval.config.build.check self;
 
-        # Validate the Hyprland config home-manager generates actually parses as
-        # Lua (this Hyprland build uses a Lua config). Catches the serializer
-        # gotchas — hyphenated keys like `exec-once` and `$`-prefixed variable
-        # keys both produce invalid Lua — before they ever reach the machine.
-        hyprland-lua = pkgs.runCommand "hyprland-lua-check" { nativeBuildInputs = [ pkgs.lua5_4 ]; } ''
-          luac -p ${
-            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.lua".source
-          }
-          touch $out
+        # Ensure the generated Hyprland config renders (we force the hyprlang
+        # `hyprland.conf` format via configType — see modules/home/hyprland.nix).
+        # TODO: upgrade to a real hyprlang validator (hyprls / hyprland --verify).
+        hyprland-config = pkgs.runCommand "hyprland-config-check" { } ''
+          cp ${
+            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.conf".source
+          } $out
         '';
       };
 

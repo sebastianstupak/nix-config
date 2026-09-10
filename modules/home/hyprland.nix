@@ -10,15 +10,28 @@
     package = null;
     portalPackage = null;
 
+    # On Hyprland 0.55 the HM module defaults to a Lua config (hyprland.lua), whose
+    # serialization mangles bind strings (`hl.bind("SUPER, Return, ...")` is not a
+    # valid call). Force the classic hyprlang format (hyprland.conf) — it renders
+    # these bind/exec-once/variable settings correctly.
+    configType = "hyprlang";
+
     settings = {
-      # NOTE: this Hyprland build uses a Lua-generated config (home-manager writes
-      # hyprland.lua). hyprlang "$var" keys become invalid Lua (`hl.$mod(...)`), so
-      # we do NOT declare $mod/$terminal/$menu — values are inlined below instead.
+      "$mod" = "SUPER";
+      "$terminal" = "ghostty";
+      "$menu" = "wofi --show drun";
+
       monitor = ",preferred,auto,1";
 
-      # NOTE: `exec-once` is intentionally NOT here. The Lua serializer renders a
-      # hyphenated key as `hl.exec-once(...)`, which Lua parses as subtraction and
-      # rejects. It's emitted as valid Lua bracket-indexing in extraConfig below.
+      exec-once = [
+        "waybar"
+        "mako"
+        "hypridle"
+        "nm-applet --indicator"
+        "blueman-applet"
+        "wl-paste --watch cliphist store" # clipboard history daemon
+        "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"
+      ];
 
       input = {
         kb_layout = "us,sk";
@@ -37,36 +50,36 @@
       decoration.rounding = 6;
 
       bind = [
-        "SUPER, Return, exec, ghostty"
-        "SUPER, Q, killactive"
-        "SUPER, E, exec, nautilus"
-        "SUPER, R, exec, wofi --show drun"
-        "SUPER, V, togglefloating"
-        "SUPER, F, fullscreen"
-        "SUPER, L, exec, hyprlock"
-        "SUPER SHIFT, X, exec, wlogout" # power menu
-        "SUPER, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
+        "$mod, Return, exec, $terminal"
+        "$mod, Q, killactive"
+        "$mod, E, exec, nautilus"
+        "$mod, R, exec, $menu"
+        "$mod, V, togglefloating"
+        "$mod, F, fullscreen"
+        "$mod, L, exec, hyprlock"
+        "$mod SHIFT, X, exec, wlogout" # power menu
+        "$mod, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
 
         # focus movement
-        "SUPER, left, movefocus, l"
-        "SUPER, right, movefocus, r"
-        "SUPER, up, movefocus, u"
-        "SUPER, down, movefocus, d"
+        "$mod, left, movefocus, l"
+        "$mod, right, movefocus, r"
+        "$mod, up, movefocus, u"
+        "$mod, down, movefocus, d"
 
         # workspaces
-        "SUPER, 1, workspace, 1"
-        "SUPER, 2, workspace, 2"
-        "SUPER, 3, workspace, 3"
-        "SUPER, 4, workspace, 4"
-        "SUPER SHIFT, 1, movetoworkspace, 1"
-        "SUPER SHIFT, 2, movetoworkspace, 2"
-        "SUPER SHIFT, 3, movetoworkspace, 3"
-        "SUPER SHIFT, 4, movetoworkspace, 4"
+        "$mod, 1, workspace, 1"
+        "$mod, 2, workspace, 2"
+        "$mod, 3, workspace, 3"
+        "$mod, 4, workspace, 4"
+        "$mod SHIFT, 1, movetoworkspace, 1"
+        "$mod SHIFT, 2, movetoworkspace, 2"
+        "$mod SHIFT, 3, movetoworkspace, 3"
+        "$mod SHIFT, 4, movetoworkspace, 4"
 
         # region screenshot to clipboard
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
         # Windows-style snipping tool: region screenshot -> annotate (swappy)
-        "SUPER SHIFT, S, exec, grim -g \"$(slurp)\" - | swappy -f -"
+        "$mod SHIFT, S, exec, grim -g \"$(slurp)\" - | swappy -f -"
 
         # media keys (Spotify, browsers, ... via MPRIS/playerctl)
         ", XF86AudioPlay, exec, playerctl play-pause"
@@ -75,8 +88,8 @@
       ];
 
       bindm = [
-        "SUPER, mouse:272, movewindow"
-        "SUPER, mouse:273, resizewindow"
+        "$mod, mouse:272, movewindow"
+        "$mod, mouse:273, resizewindow"
       ];
 
       # repeatable audio / brightness keys
@@ -88,17 +101,6 @@
         ", XF86MonBrightnessDown, exec, brightnessctl set 5%-"
       ];
     };
-
-    # exec-once entries as valid Lua (bracket-indexing sidesteps the hyphen bug).
-    extraConfig = ''
-      hl["exec-once"]("waybar")
-      hl["exec-once"]("mako")
-      hl["exec-once"]("hypridle")
-      hl["exec-once"]("nm-applet --indicator")
-      hl["exec-once"]("blueman-applet")
-      hl["exec-once"]("wl-paste --watch cliphist store")
-      hl["exec-once"]("${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1")
-    '';
   };
 
   # Bar, notifications, launcher, screen lock, idle daemon.

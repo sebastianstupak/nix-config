@@ -29,7 +29,13 @@
   ...
 }:
 let
-  fg = "#${config.lib.stylix.colors.base05}";
+  # base0D (the scheme's accent), not base05. On Kanagawa Dragon base05 is
+  # #c5c9c5 — a near-neutral warm grey — so tinting with it produces something
+  # that reads as plain greyscale even though it is technically scheme-correct.
+  # base0D is the same accent already used for the active window border and
+  # fuzzel's own border, which ties the launcher together.
+  # Swap for base0B (sage), base0C (cyan), base0A (sand) or base0E (mauve).
+  fg = "#${config.lib.stylix.colors.base0D}";
 
   themeName = "StylixMono";
 
@@ -61,23 +67,68 @@ let
       [ -d "$d" ] && search="$search $d"
     done
 
-    # Every application advertised by a .desktop file on XDG_DATA_DIRS.
-    names="$(grep -h '^Icon=' \
-      /etc/profiles/per-user/"$USER"/share/applications/*.desktop \
-      /run/current-system/sw/share/applications/*.desktop 2>/dev/null \
-      | sed 's/^Icon=//' | grep -v '^/' | sort -u)"
+    appdirs="/etc/profiles/per-user/$USER/share/applications /run/current-system/sw/share/applications"
+
+    # Some .desktop files set Icon= to an absolute path (netbird does). fuzzel
+    # then loads that file directly and bypasses the icon theme entirely, so no
+    # theme can recolour it — it would stay full-colour among monochrome peers.
+    # Shadow those entries with a local copy whose Icon= is a plain *name*, and
+    # generate that name into our theme. XDG resolves $XDG_DATA_HOME first, so
+    # the local file wins over the system one of the same basename.
+    overrides="$HOME/.local/share/applications"
+    manifest="$overrides/.stylix-mono-generated"
+    mkdir -p "$overrides"
+    # Remove only what a previous run created, tracked by manifest.
+    if [ -f "$manifest" ]; then
+      while read -r stale; do
+        [ -n "$stale" ] && rm -f "$overrides/$stale"
+      done < "$manifest"
+    fi
+    : > "$manifest"
+
+    names=""
+    for dir in $appdirs; do
+      [ -d "$dir" ] || continue
+      for df in "$dir"/*.desktop; do
+        [ -e "$df" ] || continue
+        icon="$(sed -n 's/^Icon=//p' "$df" | head -1)"
+        [ -z "$icon" ] && continue
+        case "$icon" in
+          /*)
+            base="$(basename "$icon")"
+            base="''${base%.*}"
+            sed "s|^Icon=.*|Icon=$base|" "$df" > "$overrides/$(basename "$df")"
+            basename "$df" >> "$manifest"
+            names="$names $base:$icon"
+            ;;
+          *)
+            names="$names $icon:"
+            ;;
+        esac
+      done
+    done
+    names="$(printf '%s\n' $names | sort -u)"
 
     converted=0
     lettered=0
 
-    for ic in $names; do
+    for entry in $names; do
+      [ -z "$entry" ] && continue
+      ic="''${entry%%:*}"
+      explicit="''${entry#*:}"
       [ -z "$ic" ] && continue
-      # Prefer scalable, else the largest raster (dir names like 256x256).
-      src="$(find -L $search -name "$ic.svg" 2>/dev/null | head -1)"
-      if [ -z "$src" ]; then
-        src="$(find -L $search -name "$ic.png" 2>/dev/null \
-          | awk '{ if (match($0, /([0-9]+)x[0-9]+/, m)) print m[1]" "$0; else print 0" "$0 }' \
-          | sort -rn | head -1 | cut -d' ' -f2-)"
+
+      if [ -n "$explicit" ]; then
+        # Absolute path straight from the .desktop file.
+        src="$explicit"
+      else
+        # Prefer scalable, else the largest raster (dir names like 256x256).
+        src="$(find -L $search -name "$ic.svg" 2>/dev/null | head -1)"
+        if [ -z "$src" ]; then
+          src="$(find -L $search -name "$ic.png" 2>/dev/null \
+            | awk '{ if (match($0, /([0-9]+)x[0-9]+/, m)) print m[1]" "$0; else print 0" "$0 }' \
+            | sort -rn | head -1 | cut -d' ' -f2-)"
+        fi
       fi
 
       if [ -n "$src" ] && magick -background none "$src" -resize 64x64 \

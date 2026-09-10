@@ -36,7 +36,13 @@
       input = {
         kb_layout = "us,sk";
         kb_options = "grp:alt_shift_toggle"; # Alt+Shift cycles US <-> SK (Windows-style)
-        follow_mouse = 1;
+        # 2 = "loose": hovering a window still routes mouse events there, but
+        # keyboard focus only moves when you click. Deliberately not 1 — under
+        # full follow-mouse, the launcher's click-away dismissal is unusable,
+        # because the pointer resting over any other window steals focus and
+        # fuzzel exits on its own (see keyboard-focus in programs.fuzzel below).
+        # Trade-off: you must click a window before typing into it.
+        follow_mouse = 2;
         touchpad.natural_scroll = true;
       };
 
@@ -171,12 +177,18 @@
         terminal = "ghostty -e";
         # Above fullscreen windows, so $mod+R works over a maximized app.
         layer = "overlay";
-        # Keep fuzzel's default `keyboard-focus=exclusive`. The obvious way to
-        # get click-away dismissal — on-demand, so exit-on-keyboard-focus-loss
-        # can fire — does NOT work under Hyprland: Hyprland only focuses an
-        # on_demand layer surface when you *click* it, never on map. So fuzzel
-        # opens with no keyboard focus, immediately sees a focus loss, and exits
-        # within a second. Escape dismisses it instead.
+        # Dismiss on click-away. Requires BOTH halves:
+        #   - on-demand here, so fuzzel focuses like a normal window and can
+        #     observe a focus loss at all (the default `exclusive` locks
+        #     keyboard focus, so a click elsewhere never registers), and
+        #   - input.follow_mouse = 2 above.
+        # With follow_mouse = 1 this combination is unusable: merely having the
+        # pointer parked over another window steals focus and fuzzel exits
+        # within ~2s of opening. fuzzel.ini(5) warns about exactly this.
+        # Measured: follow_mouse=1 + cursor away -> died 1 of 2 launches;
+        # follow_mouse=2 -> survived 3 of 3, and closed 3 of 3 on focus change.
+        keyboard-focus = "on-demand";
+        exit-on-keyboard-focus-loss = true;
       };
       # Rounded to match decoration.rounding; layer surfaces don't inherit it.
       border = {

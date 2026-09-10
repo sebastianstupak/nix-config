@@ -120,6 +120,116 @@
           touch $out
         '';
 
+        # The global commit-msg policy (modules/home/git-hooks.nix) rewrites and
+        # rejects commit messages, so a regression either mangles real messages
+        # or silently lets attribution through. Drive the installed hook via
+        # actual `git commit` runs in throwaway repos rather than calling the
+        # script directly — that also exercises the dispatcher's delegation.
+        git-hook-policy =
+          pkgs.runCommand "git-hook-policy-test"
+            {
+              nativeBuildInputs = [
+                pkgs.git
+                pkgs.coreutils
+              ];
+            }
+            ''
+              export HOME="$TMPDIR"
+              hooks="${
+                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."git/hooks/commit-msg".source
+              }"
+
+              git config --global user.email t@example.com
+              git config --global user.name tester
+              git config --global init.defaultBranch main
+              git config --global commit.gpgsign false
+
+              # Install the dispatcher the way it is really used — as a global
+              # core.hooksPath — rather than copying it into .git/hooks. Copying it
+              # there makes it its own delegation target and it recurses.
+              mkdir -p "$TMPDIR/globalhooks"
+              install -m755 "$hooks" "$TMPDIR/globalhooks/commit-msg"
+              git config --global core.hooksPath "$TMPDIR/globalhooks"
+
+              fresh() {
+                rm -rf "$TMPDIR/r"; mkdir -p "$TMPDIR/r"; cd "$TMPDIR/r"
+                git init -q .
+                echo x > f; git add f
+              }
+
+              fail() { echo "FAIL: $1" >&2; exit 1; }
+
+              # --- 1. attribution trailer is stripped, commit still succeeds ---
+              fresh
+              printf 'feat: thing\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n' > m
+              git commit -q -F m || fail "trailer-only message should commit"
+              got="$(git log -1 --pretty=%B)"
+              case "$got" in *Co-Authored-By*) fail "trailer survived: $got";; esac
+              case "$got" in *"feat: thing"*) : ;; *) fail "subject lost: $got";; esac
+              echo "  ok: Co-Authored-By stripped, subject preserved"
+
+              # --- 2. Claude-Session and Generated with are stripped too ---
+              fresh
+              printf 'fix: y\n\n🤖 Generated with [Claude Code](https://claude.com)\nClaude-Session: https://x\n' > m
+              git commit -q -F m || fail "generated-with message should commit"
+              got="$(git log -1 --pretty=%B)"
+              case "$got" in *Generated*|*Claude-Session*) fail "not stripped: $got";; esac
+              echo "  ok: Generated-with / Claude-Session stripped"
+
+              # --- 3. a prose mention is REJECTED, not silently rewritten ---
+              fresh
+              printf 'feat: ask claude about it\n' > m
+              if git commit -q -F m 2>/dev/null; then fail "prose mention should be rejected"; fi
+              test -z "$(git log --oneline 2>/dev/null)" || fail "commit was created despite rejection"
+              echo "  ok: prose mention rejected"
+
+              # --- 4. case-insensitivity ---
+              fresh
+              printf 'chore: bump ANTHROPIC sdk\n' > m
+              if git commit -q -F m 2>/dev/null; then fail "uppercase mention should be rejected"; fi
+              echo "  ok: rejection is case-insensitive"
+
+              # --- 5. an ordinary message is untouched, byte for byte ---
+              fresh
+              printf 'refactor(core): split the parser\n\nBody line.\n\nCo-Authored-By: Ada <ada@example.com>\n' > m
+              git commit -q -F m || fail "clean message should commit"
+              got="$(git log -1 --pretty=%B)"
+              case "$got" in *"Co-Authored-By: Ada"*) : ;; *) fail "human co-author was stripped: $got";; esac
+              case "$got" in *"Body line."*) : ;; *) fail "body lost: $got";; esac
+              echo "  ok: unrelated message and human co-author preserved"
+
+              # --- 6. dispatcher delegates to a repo-local hook ---
+              # printf, not a heredoc: this is inside a Nix indented string,
+              # which would keep the body's relative indentation and break the
+              # shebang.
+              fresh
+              mkdir -p .git/hooks
+              printf '%s\n' '#!/bin/sh' 'grep -q FORBIDDEN "$1" && exit 1' 'exit 0' \
+                > .git/hooks/commit-msg
+              chmod +x .git/hooks/commit-msg
+              printf 'feat: FORBIDDEN token\n' > m
+              if git commit -q -F m 2>/dev/null; then fail "delegated hook should have rejected"; fi
+              echo "  ok: dispatcher delegates to a repo-local hook"
+
+              # ...and the delegate still runs for messages the policy allows.
+              printf 'feat: allowed token\n' > m
+              git commit -q -F m || fail "clean message should pass both policy and delegate"
+              echo "  ok: delegation does not block clean commits"
+
+              # --- 7. self-delegation must not recurse ---
+              # Put the dispatcher at the repo hook path too; the guard should stop
+              # it re-entering itself instead of hanging.
+              fresh
+              mkdir -p .git/hooks
+              install -m755 "$hooks" .git/hooks/commit-msg
+              printf 'feat: safe subject\n' > m
+              timeout 30 git commit -q -F m || fail "self-delegation recursed or failed"
+              echo "  ok: self-delegation guard holds"
+
+              echo "all git-hook policy tests passed"
+              touch $out
+            '';
+
         # Waybar has no --verify-config equivalent (see `waybar --help`), and its
         # config is generated from Nix so it is JSON-valid by construction. The
         # part that can actually break is the hand-written CSS in

@@ -9,6 +9,7 @@
     ../../modules/nixos/stylix.nix # system-wide theming (Kanagawa)
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/containers.nix # docker
+    ../../modules/nixos/netbird.nix # mesh VPN
   ];
 
   networking.hostName = "workstation";

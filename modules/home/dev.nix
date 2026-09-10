@@ -14,6 +14,7 @@
     lazygit # terminal git UI
     gnumake
     claude-code # Anthropic CLI (unfree; package-only so it doesn't manage ~/.claude)
+    opentofu # infrastructure-as-code (FOSS Terraform fork; the `tofu` CLI)
 
     # language toolchains (baseline — prefer per-project devshells)
     go

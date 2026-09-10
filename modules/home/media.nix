@@ -6,7 +6,9 @@
     spotify
     playerctl
     mpv # video player
+    vlc # media player
     imv # image viewer (Wayland)
     obs-studio # screen recording / streaming
+    musescore # music notation
   ];
 }

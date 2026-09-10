@@ -13,6 +13,7 @@
     gh # GitHub CLI
     lazygit # terminal git UI
     gnumake
+    claude-code # Anthropic CLI (unfree; package-only so it doesn't manage ~/.claude)
 
     # language toolchains (baseline — prefer per-project devshells)
     go

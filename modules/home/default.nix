@@ -7,6 +7,7 @@
     ./terminal.nix
     ./editor.nix
     ./browsers.nix
+    ./office.nix
     ./git.nix
     ./dev.nix
     ./hyprland.nix

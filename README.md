@@ -6,6 +6,9 @@ as a NixOS module, secrets via [sops-nix](https://github.com/Mic92/sops-nix).
 - **Host:** `workstation` (HP laptop, daily driver)
 - **User:** `sebastianstupak`
 - **Channel:** `nixos-26.05`
+- **Desktop:** Hyprland (Wayland) · greetd + tuigreet
+- **Theme:** [Stylix](https://github.com/nix-community/stylix) with the Kanagawa scheme
+- **Terminal / shell / editor:** ghostty · zsh + starship · neovim + Zed
 
 > Working with an AI agent (or want the conventions)? Read **[AGENTS.md](./AGENTS.md)**.
 
@@ -59,11 +62,11 @@ Commit messages follow **Conventional Commits** — `type(scope): description`
 
 | Path | Purpose |
 |------|---------|
-| `flake.nix` | Inputs and `nixosConfigurations` |
-| `hosts/<host>/` | Per-machine system config + hardware config |
-| `modules/nixos/` | Reusable system modules |
-| `modules/home/` | Reusable home-manager modules |
-| `home/<user>/` | Per-user home-manager config |
+| `flake.nix` | Inputs and `nixosConfigurations` (via the `mkHost` helper) |
+| `hosts/<host>/` | Per-machine config: imports the profiles it needs + hardware config |
+| `modules/nixos/` | System modules: `core` (baseline) + opt-in `desktop`/`stylix`/`laptop`/`containers` |
+| `modules/home/` | home-manager modules: shell, cli, terminal, editor, browsers, git, dev, hyprland |
+| `home/<user>/` | Per-user home-manager config (identity) |
 | `.githooks/` + `scripts/` | Committed git hooks + the Conventional Commits check |
 | `lefthook.yml` | pre-commit / pre-push linters (see [AGENTS.md](./AGENTS.md)) |
 | `secrets/` | Encrypted secrets (see [`secrets/README.md`](./secrets/README.md)) |

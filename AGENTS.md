@@ -75,21 +75,30 @@ statix.toml                   statix lint config (ignores generated hardware con
 scripts/                      helper scripts (commit-msg.sh: Conventional Commits check)
 .sops.yaml                    sops recipients + creation rules
 hosts/<host>/
-  default.nix                 Per-machine system config; wires modules + home-manager
+  default.nix                 Per-machine config; imports the profiles it needs + home-manager
   hardware-configuration.nix  Machine-specific; regenerated on the host, committed
-modules/nixos/                Reusable system modules (core.nix, desktop.nix)
-modules/home/                 Reusable home-manager modules
-home/<user>/                  Per-user home-manager config
+modules/nixos/                System modules — core (baseline, always imported via default.nix)
+                              + opt-in profiles: desktop (Hyprland), stylix (theming),
+                              laptop (power/bt/fw), containers (docker)
+modules/home/                 home-manager modules: shell, cli, terminal, editor,
+                              browsers, git, dev, hyprland
+home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
 ```
+
+`flake.nix` exposes a `mkHost` helper that wires home-manager + sops-nix + stylix
+once; `modules/nixos/default.nix` is the baseline (core only), and each host opts
+into desktop/laptop/containers/stylix by importing them. This keeps a future
+headless host from pulling in a desktop stack.
 
 Add these directories only when you actually need them (YAGNI): `overlays/`
 (nixpkgs overlays), `pkgs/` (custom `callPackage` packages), `lib/` (helper
 functions). Document new top-level dirs here.
 
-**Adding a host:** create `hosts/<name>/`, add a `nixosConfigurations.<name>`
-entry in `flake.nix`. **Adding a user:** create `home/<name>/` and reference it
-from the host's `home-manager.users.<name>`.
+**Adding a host:** create `hosts/<name>/` importing the profiles it needs, then
+add `<name> = mkHost ./hosts/<name>;` under `nixosConfigurations` in `flake.nix`.
+**Adding a user:** create `home/<name>/` and reference it from the host's
+`home-manager.users.<name>`.
 
 ## Code style
 

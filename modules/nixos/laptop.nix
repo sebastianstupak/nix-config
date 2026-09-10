@@ -17,6 +17,16 @@
   hardware.bluetooth = {
     enable = true;
     powerOnBoot = true;
+
+    # Battery levels for connected devices (headphones, mice). BlueZ only exposes
+    # org.bluez.Battery1 with Experimental on — without it the D-Bus property
+    # simply is not there, so nothing can report a headphone as 40%. That is what
+    # feeds the tooltip of waybar's `bluetooth` module (modules/home/waybar.nix).
+    #
+    # "Experimental" here means BlueZ's not-yet-stable D-Bus interfaces, not
+    # unstable code paths in the daemon; battery reporting has lived behind this
+    # flag for years and enabling it is the normal way to get it.
+    settings.General.Experimental = true;
   };
   services.blueman.enable = true;
 

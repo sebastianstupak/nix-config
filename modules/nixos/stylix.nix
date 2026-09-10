@@ -26,11 +26,18 @@
     # Pointer cursor. Stylix installs the package and wires XCURSOR_THEME/size
     # plus the GTK/Qt settings. Bibata-Modern-Ice is a crisp white cursor —
     # stays legible against Dragon's near-black background.
-    # Alternatives (drop-in, swap both lines):
-    #   pkgs.bibata-cursors    "Bibata-Modern-Amber"    warm amber, leans into Dragon's palette
-    #   pkgs.phinger-cursors   "phinger-cursors-light"  softer, rounder, slightly larger
+    #
+    # bibata-cursors ships 12 variants totalling ~324 MiB; we use exactly one
+    # (27 MiB). Copy just that variant out so the *system closure* references
+    # only it — the full package stays a build-time input and is collectable.
+    # To switch variant, change both the name below and the copied directory.
+    # Alternatives: "Bibata-Modern-Amber" (warm, leans into Dragon's palette),
+    # or pkgs.phinger-cursors / "phinger-cursors-light" (softer, rounder).
     cursor = {
-      package = pkgs.bibata-cursors;
+      package = pkgs.runCommand "bibata-modern-ice" { } ''
+        mkdir -p $out/share/icons
+        cp -r ${pkgs.bibata-cursors}/share/icons/Bibata-Modern-Ice $out/share/icons/
+      '';
       name = "Bibata-Modern-Ice";
       size = 24;
     };

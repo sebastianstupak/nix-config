@@ -23,6 +23,21 @@
       # knob to separate the two (ghostty-org/ghostty#9438).
       working-directory = "home";
       window-inherit-working-directory = false;
+
+      # Show the window title in ghostty itself rather than in waybar (which
+      # deliberately has no `hyprland/window` module — see waybar.nix).
+      #
+      # `client` rather than the default `auto`: on Wayland, `auto` prefers
+      # SERVER-side decorations wherever the compositor speaks
+      # org_kde_kwin_server_decoration, and Hyprland does — but Hyprland's
+      # server-side decoration is just a border, it draws no title text. So the
+      # title had nowhere to appear. Forcing CSD makes GTK draw a real header bar.
+      #
+      # With enableZshIntegration above, ghostty tracks the running command, so
+      # the header reads `claude`/`nvim`/... per window instead of a static name.
+      window-decoration = "client";
+      # Second line under the title: which directory this surface is in.
+      window-subtitle = "working-directory";
     };
   };
 

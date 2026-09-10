@@ -178,4 +178,45 @@ in
   # mkForce is the only way to win. Stylix keeps owning the GTK/Qt icon theme;
   # only the launcher uses the generated one.
   programs.fuzzel.settings.main."icon-theme" = lib.mkForce themeName;
+
+  # The launcher felt slow on the first open of a session, and it is not icon
+  # lookup: an strace of a cold start shows 1427 file syscalls, of which only 13
+  # touch our icons but 464 are fontconfig. Fonts are installed both system-wide
+  # and (by Stylix, via home.packages) into home-manager-path, and fontconfig
+  # caches per directory — so the user ends up with a private ~22 MB cache
+  # across 91 files that the first client of the session has to fault in.
+  #
+  # Nothing is misconfigured; it is simply cold page cache, and whichever
+  # program starts first pays for it. So pay it up front, at idle priority,
+  # instead of on the first $mod+R.
+  systemd.user.services.launcher-warmup = {
+    Unit = {
+      Description = "Fault launcher fonts, icons and desktop entries into the page cache";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "oneshot";
+      # Idle scheduling: this is pure prefetch, it must never compete with the
+      # session actually coming up.
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      ExecStart = toString (
+        pkgs.writeShellScript "launcher-warmup" ''
+          # fc-match forces fontconfig to load and validate its caches, which is
+          # the bulk of the cost. The rest is a plain read to populate the cache.
+          ${pkgs.fontconfig}/bin/fc-match sans >/dev/null 2>&1 || true
+          ${pkgs.fontconfig}/bin/fc-match monospace >/dev/null 2>&1 || true
+          for d in "$HOME/.cache/fontconfig" \
+                   "$HOME/.local/share/icons/${themeName}/apps/64" \
+                   "$HOME/.local/share/applications" \
+                   /etc/profiles/per-user/"$USER"/share/applications; do
+            [ -d "$d" ] || continue
+            find -L "$d" -type f -exec cat {} + >/dev/null 2>&1 || true
+          done
+        ''
+      );
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
+  };
 }

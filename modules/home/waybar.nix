@@ -4,9 +4,9 @@
 # Why this file exists at all: `programs.waybar.enable = true` alone writes NO
 # config, so waybar falls back to the upstream default (/etc/xdg/waybar/config),
 # which is written for Sway. Under Hyprland every `sway/*` module in it silently
-# does nothing — meaning no workspaces, no window title, and no keyboard-layout
-# indicator (the last one matters here: kb_options = grp:alt_shift_toggle
-# switches us <-> sk with zero visual feedback). The default also carries modules
+# does nothing — meaning no workspaces and no keyboard-layout indicator (the
+# latter matters here: kb_options = grp:alt_shift_toggle switches us <-> sk with
+# zero visual feedback). The default also carries modules
 # that can't work on this machine: mpd, custom/media (points at a mediaplayer.py
 # that doesn't exist), battery#bat2, and power-profiles-daemon — which laptop.nix
 # explicitly disables in favour of TLP.
@@ -34,8 +34,20 @@
       # in step with the Stylix font size instead of needing a matching tweak.
       spacing = 6;
 
-      modules-left = [ "hyprland/workspaces" ];
-      modules-center = [ "hyprland/window" ];
+      # Left holds the two things worth reading mid-task (time, now playing),
+      # workspaces sit dead centre, and the right edge is the status cluster.
+      # `modules-center` is a real centre: waybar puts it in a GTK centre box, so
+      # it stays put regardless of how wide the left and right groups get.
+      #
+      # Deliberately NO `hyprland/window` module. The focused window's title is
+      # ghostty's job to show — see window-decoration in modules/home/terminal.nix.
+      # Duplicating it here just meant reading the same "claude"/cwd string in two
+      # places, and a centred title fights the workspaces for the same space.
+      modules-left = [
+        "clock"
+        "mpris"
+      ];
+      modules-center = [ "hyprland/workspaces" ];
       modules-right = [
         "tray"
         "idle_inhibitor"
@@ -45,7 +57,6 @@
         "bluetooth"
         "network"
         "battery"
-        "clock"
         "custom/power"
       ];
 
@@ -57,16 +68,24 @@
         persistent-workspaces."*" = 5;
       };
 
-      "hyprland/window" = {
-        format = "{title}";
-        max-length = 70;
-        separate-outputs = true;
-        # Browsers append their own name to every title, which eats the width
-        # that the actual page title needs. Both of ours, stripped:
-        rewrite = {
-          "(.*) — LibreWolf" = "$1";
-          "(.*) - Chromium" = "$1";
-        };
+      # Now playing. Native module (waybar links libplayerctl), so this is the
+      # same MPRIS source the XF86Audio* binds in hyprland.nix drive — no helper
+      # script. Hides itself entirely when nothing is playing, so the left edge
+      # is just the clock most of the time.
+      mpris = {
+        format = "{player_icon} {dynamic}";
+        format-paused = "{status_icon} <i>{dynamic}</i>";
+        player-icons.default = "󰝚";
+        status-icons.paused = "󰏤";
+        dynamic-order = [
+          "title"
+          "artist"
+        ];
+        dynamic-len = 40;
+        max-length = 45;
+        on-click = "playerctl play-pause";
+        on-scroll-up = "playerctl next";
+        on-scroll-down = "playerctl previous";
       };
 
       idle_inhibitor = {
@@ -233,14 +252,16 @@
         color: @base03;
       }
 
-      /* Dim the title so it recedes behind the workspace/status indicators. */
-      #window {
+      /* Dim now-playing so it recedes behind the clock and the status cluster. */
+      #mpris {
         color: @base04;
+        padding: 0 5px;
       }
 
-      /* The two modules Stylix has no padding rule for. It does cover
-         #idle_inhibitor, #language and #bluetooth already — don't re-add those,
-         they'd just be redundant lines to keep in sync. */
+      /* Remaining modules Stylix has no padding rule for (#mpris gets its own
+         above). It DOES already cover #idle_inhibitor, #language, #bluetooth,
+         #clock, #backlight, #network, #battery and #wireplumber — don't re-add
+         those, they'd just be redundant lines to keep in sync. */
       #tray,
       #custom-power {
         padding: 0 5px;

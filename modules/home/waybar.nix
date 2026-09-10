@@ -323,10 +323,16 @@ let
     '';
   };
 
-  # Feeds custom/meetings: how many of today's meetings are still ahead. Reads
-  # the local mirror of the Proton feed — modules/home/calendar.nix owns how it
-  # gets there, and both paths below are derived from the same options it
-  # configures vdirsyncer with, so the bar cannot drift from the syncer.
+  # Which calendars the counter counts, straight from `my.calendars` — the same
+  # attrset home/<user>/default.nix declares, so the bar and the syncer cannot
+  # disagree, and a name that khal does not know is impossible by construction
+  # (it would abort with a usage error: khal validates -a against its config).
+  meetingCalendars = lib.attrNames (lib.filterAttrs (_: c: c.meetings) config.my.calendars);
+
+  # Feeds custom/meetings: how many of today's meetings are still ahead, across
+  # every calendar flagged `meetings = true` — work (Outlook) and personal
+  # (Proton) land in the same number. modules/home/calendar.nix owns how they get
+  # here.
   #
   # khal rather than reading the .ics files here: a vdir holds raw VEVENTs, so
   # anything hand-rolled would have to expand RRULEs and resolve VTIMEZONEs
@@ -341,16 +347,34 @@ let
       pkgs.jq
     ];
     text = ''
-      status=${lib.escapeShellArg "${config.accounts.calendar.basePath}/.vdirsyncer-status/proton.items"}
+      # One status file per calendar. Freshness comes from the OLDEST of them,
+      # because a count merged from several feeds is only as trustworthy as its
+      # worst source — and each pair fails independently: an Outlook link that
+      # the tenant rotated stops updating while Proton carries on, which without
+      # this would look like a quiet Thursday.
+      #
+      # A frozen count is worse than no count, and vdirsyncer rewrites these on
+      # every successful sync including no-op ones, so mtime is the real
+      # "last synced".
+      status_files=(${
+        lib.escapeShellArgs (map (n: "${config.my.calendarStatusPath}/${n}.items") meetingCalendars)
+      })
 
-      # Freshness first, because a frozen count is worse than no count: Proton's
-      # share links are documented to stop feeding third-party clients after a
-      # while, and the only symptom is a number that quietly stops moving.
-      # vdirsyncer rewrites this file on every successful sync, including no-op
-      # ones, so its mtime is the real "last synced".
+      oldest=""
+      for f in "''${status_files[@]}"; do
+        if [ ! -f "$f" ]; then
+          oldest=""
+          break
+        fi
+        m=$(stat -c %Y "$f")
+        if [ -z "$oldest" ] || [ "$m" -lt "$oldest" ]; then
+          oldest=$m
+        fi
+      done
+
       stale=no
-      if [ -f "$status" ]; then
-        mins=$(( ( $(date +%s) - $(stat -c %Y "$status") ) / 60 ))
+      if [ -n "$oldest" ]; then
+        mins=$(( ( $(date +%s) - oldest ) / 60 ))
         # Switch to hours past a couple of them, because the number people
         # actually read this tooltip for is "is 1200 minutes bad?".
         if [ "$mins" -ge 120 ]; then
@@ -364,13 +388,23 @@ let
         stale=yes
       fi
 
-      # `today 1d` means today ONLY — the range argument is a length, not an end
-      # date. Asking for fields rather than a format string so the filter below
-      # can read them; khal accepts --json repeatedly.
-      if ! events=$(khal list --json title --json start-time --json end-time \
-                              --json end today 1d 2>&1); then
+      # -a restricts the query to the counted calendars; without it khal would
+      # merge in every mirrored feed, birthdays and holidays included. `today 1d`
+      # means today ONLY — the range argument is a length, not an end date.
+      # Asking for fields rather than a format string so the filter below can
+      # read them; khal accepts --json repeatedly.
+      if ! events=$(khal list ${
+        lib.escapeShellArgs (
+          lib.concatMap (n: [
+            "-a"
+            n
+          ]) meetingCalendars
+        )
+      } \
+                              --json title --json calendar --json start-time \
+                              --json end-time --json end today 1d 2>&1); then
         jq -cn --arg err "$events" \
-          '{text: "󰃭 ?", tooltip: ("khal could not read the calendar:\n" + $err),
+          '{text: "󰃭 ?", tooltip: ("khal could not read the calendars:\n" + $err),
             class: "error"}'
         exit 0
       fi
@@ -383,17 +417,25 @@ let
       #
       # All-day entries are excluded by the empty start-time: they are not
       # meetings, and counting them would put a permanent +1 on the bar.
+      #
+      # sort_by(.end): khal returns events grouped per calendar, so a merged
+      # work+personal list would otherwise read 09:00, 14:00, 10:00 — useless as
+      # a "what's next" list, which is the whole point of the hover.
       jq -cn --argjson evs "$events" --arg now "$(date '+%Y-%m-%d %H:%M')" \
-             --arg synced "$synced" --arg stale "$stale" '
+             --arg synced "$synced" --arg stale "$stale" \
+             --argjson showcal ${if lib.length meetingCalendars > 1 then "true" else "false"} '
         def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
-        [ $evs[] | select(."start-time" != "" and .end > $now) ] as $left
+        [ $evs[] | select(."start-time" != "" and .end > $now) ] as $all
+        | ($all | sort_by(.end)) as $left
         | ($left | length) as $n
         | {
             text: "󰃭 \($n)",
             tooltip: (
               (if $n == 0 then "<b>Nothing left today</b>"
                else "<b>\($n) left today</b>\n"
-                    + ([ $left[] | "  \(."start-time")–\(."end-time")  \(.title | esc)" ]
+                    + ([ $left[]
+                         | "  \(."start-time")–\(."end-time")  \(.title | esc)"
+                           + (if $showcal then "  <i>\(.calendar | esc)</i>" else "" end) ]
                        | join("\n"))
                end)
               + "\n<i>Synced \($synced)"
@@ -439,7 +481,13 @@ in
       # places, and a centred title fights the workspaces for the same space.
       modules-left = [
         "custom/clock"
-        "custom/meetings"
+      ]
+      # Dropped entirely when no calendar is flagged `meetings = true`, rather
+      # than rendered as a permanent "󰃭 0": with no -a arguments khal would
+      # happily count every mirrored feed instead of none, so an empty list has
+      # to mean "no counter", not "count everything".
+      ++ lib.optional (meetingCalendars != [ ]) "custom/meetings"
+      ++ [
         "custom/notification"
         "mpris"
       ];

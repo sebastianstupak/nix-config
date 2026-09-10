@@ -15,6 +15,7 @@
     ./security.nix
     ./dev.nix
     ./hyprland.nix
+    ./mono-icons.nix
   ];
 
   # Let home-manager manage itself.

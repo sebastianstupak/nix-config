@@ -23,6 +23,7 @@
         "hypridle"
         "nm-applet --indicator"
         "blueman-applet"
+        "wl-paste --watch cliphist store" # clipboard history daemon
         "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"
       ];
 
@@ -50,6 +51,8 @@
         "$mod, V, togglefloating"
         "$mod, F, fullscreen"
         "$mod, L, exec, hyprlock"
+        "$mod SHIFT, X, exec, wlogout" # power menu
+        "$mod, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
 
         # focus movement
         "$mod, left, movefocus, l"
@@ -69,6 +72,8 @@
 
         # region screenshot to clipboard
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
+        # Windows-style snipping tool: region screenshot -> annotate (swappy)
+        "$mod SHIFT, S, exec, grim -g \"$(slurp)\" - | swappy -f -"
 
         # media keys (Spotify, browsers, ... via MPRIS/playerctl)
         ", XF86AudioPlay, exec, playerctl play-pause"
@@ -121,7 +126,11 @@
   home.packages = with pkgs; [
     grim # screenshot
     slurp # region selector
+    swappy # screenshot annotation (snipping tool)
     wl-clipboard # wl-copy / wl-paste
+    cliphist # clipboard history
+    wlogout # power menu
+    pavucontrol # audio device / volume GUI
     networkmanagerapplet # nm-applet
     nautilus # file manager
     polkit_gnome # authentication agent

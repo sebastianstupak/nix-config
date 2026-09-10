@@ -235,6 +235,29 @@ let
     '';
   };
 
+  # Click target for systemd-failed-units. The module itself renders only a
+  # count — it never calls set_tooltip, so a `tooltip-format` on it would not be
+  # populated — and a bare count cannot tell you WHICH unit died. Lists both
+  # managers because the module counts both.
+  failedUnitsScript = pkgs.writeShellApplication {
+    name = "waybar-failed-units";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+    text = ''
+      printf '=== system units ===\n'
+      systemctl --failed --no-pager || true
+      printf '\n=== user units ===\n'
+      systemctl --user --failed --no-pager || true
+      printf '\nReset a stuck one with:  systemctl [--user] reset-failed <unit>\n'
+      printf '\nPress enter to close.\n'
+      # EOF (no tty) would make read fail, and set -e would kill the window
+      # before anything could be read.
+      read -r _ || true
+    '';
+  };
+
   # Feeds custom/vpn. Shows a tunnel only while one is actually up, and hides
   # itself otherwise — the `network` module already covers plain connectivity, so
   # a permanent "VPN: off" chip would be clutter. Flip the early-exit below if you
@@ -422,8 +445,11 @@ in
       ];
       modules-center = [ "hyprland/workspaces" ];
       modules-right = [
-        # First, so a live mic or screenshare lands as far from the busy status
-        # cluster as possible. Self-hides when nothing is capturing.
+        # Both of these self-hide when there is nothing to say, so they cost no
+        # space until they matter — hence the prime position at the near edge.
+        "systemd-failed-units"
+        # A live mic or screenshare lands as far from the busy status cluster as
+        # possible. Self-hides when nothing is capturing.
         "privacy"
         # perf and temperature adjacent: both answer "is this machine struggling",
         # and both use the same green/amber/red scale.
@@ -533,6 +559,23 @@ in
       # layout code (us/sk); map it with format-us/format-sk if you want
       # different text. If this ever tracks the wrong device (external keyboard),
       # pin it with `keyboard-name` from `hyprctl devices`.
+      # Failed systemd units. On a declarative system a unit that dies after a
+      # switch is otherwise completely silent — this repo's own vdirsyncer.service
+      # sat failed for hours before anyone noticed.
+      #
+      # It does watch the USER manager, not just the system one: RequestSystemState
+      # reads SystemState from BOTH proxies and only reports "ok" when both are
+      # "running", which is what makes a failed --user unit visible here. Counting
+      # is skipped entirely while the state is ok, so this is nearly free.
+      #
+      # hide-on-ok defaults to true; stated anyway because the whole point is that
+      # it occupies no space on a healthy system.
+      "systemd-failed-units" = {
+        hide-on-ok = true;
+        format = "󰀪 {nr_failed}";
+        on-click = "ghostty -e ${lib.getExe failedUnitsScript}";
+      };
+
       # Mic / screenshare in use. Renders GTK symbolic icons compiled into the
       # waybar binary as a GResource (resources/icons/waybar_icons.gresource.xml)
       # — not text glyphs, so there is no nerd-font codepoint to pick here, and
@@ -576,8 +619,25 @@ in
         interval = 10;
       };
 
+      # us <-> sk indicator for the Alt+Shift toggle, as an explicit uppercase
+      # code rather than the lowercase xkb name.
+      #
+      # The `format-*` keys are matched on the xkb BRIEF, not the layout name —
+      # language.cpp looks up `format-<short_description>`, and getLayout() fills
+      # short_description from rxkb_layout_get_brief(). For these two that means
+      # `format-en` (not format-us) and `format-sk`; verified against
+      # xkeyboard_config's evdev.xml, where "English (US)" is name=us brief=en and
+      # "Slovak" is name=sk brief=sk.
+      #
+      # `{}` positional, NOT `{short}`: the format-* branch formats `format` with
+      # one positional argument, so a named placeholder there would not resolve.
+      # An unmatched layout falls through to the generic branch and renders the
+      # full name ("English (US)") instead — checked with `waybar -l debug`, it
+      # degrades rather than throwing.
       "hyprland/language" = {
-        format = "󰌌 {short}";
+        format = "󰌌 {}";
+        format-en = "US";
+        format-sk = "SK";
       };
 
       backlight = {
@@ -863,8 +923,15 @@ in
       #custom-notification,
       #custom-vpn,
       #privacy,
+      #systemd-failed-units,
       #custom-power {
         padding: 0 5px;
+      }
+
+      /* Red, like #privacy-item: it is only ever visible when something is
+         actually broken, so there is no benign tier to colour. */
+      #systemd-failed-units {
+        color: @base08;
       }
 
       /* Privacy: red whenever it is visible. No green/amber tier here because

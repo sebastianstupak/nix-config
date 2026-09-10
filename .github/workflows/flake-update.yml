@@ -1,0 +1,43 @@
+name: flake update
+
+# Weekly dependency bump, as a PR rather than a push. CI then validates the
+# lockfile change before it ever reaches the laptop, and it lands as its own
+# commit with no config changes mixed in — which is AGENTS.md rule 4.
+on:
+  schedule:
+    # Mondays 06:00 UTC. Cron here is UTC regardless of the machine's timezone.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+# The default GITHUB_TOKEN is read-only for contents; opening a PR needs both.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: nix flake update
+        run: nix flake update --commit-lock-file
+
+      # peter-evans/create-pull-request notices there is nothing to commit and
+      # exits cleanly when the lockfile did not move, so a quiet week is a no-op
+      # rather than an empty PR.
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: flake-update
+          # Reuse one branch, so an unmerged bump is refreshed rather than
+          # accumulating a new PR every Monday.
+          title: "chore: nix flake update"
+          commit-message: "chore: nix flake update"
+          body: |
+            Automated weekly `nix flake update`.
+
+            The `flake check` and `build` workflows gate this — do not merge on
+            a red check. If the build fails, bisect by updating one input at a
+            time (`nix flake update <input>`) rather than merging a broken bump.
+          delete-branch: true

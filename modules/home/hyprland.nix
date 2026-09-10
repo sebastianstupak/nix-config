@@ -171,13 +171,12 @@
         terminal = "ghostty -e";
         # Above fullscreen windows, so $mod+R works over a maximized app.
         layer = "overlay";
-        # Close when clicking another window. `exit-on-keyboard-focus-loss` is
-        # already yes by default, but it never fires under the default
-        # `keyboard-focus=exclusive`, which *locks* keyboard focus to fuzzel —
-        # so a click elsewhere never transfers focus and the launcher stays up.
-        # on-demand makes it focus like a normal window, so the exit triggers.
-        keyboard-focus = "on-demand";
-        exit-on-keyboard-focus-loss = true;
+        # Keep fuzzel's default `keyboard-focus=exclusive`. The obvious way to
+        # get click-away dismissal — on-demand, so exit-on-keyboard-focus-loss
+        # can fire — does NOT work under Hyprland: Hyprland only focuses an
+        # on_demand layer surface when you *click* it, never on map. So fuzzel
+        # opens with no keyboard focus, immediately sees a focus loss, and exits
+        # within a second. Escape dismisses it instead.
       };
       # Rounded to match decoration.rounding; layer surfaces don't inherit it.
       border = {

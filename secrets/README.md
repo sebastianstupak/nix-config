@@ -8,18 +8,33 @@ The plumbing is already wired (`sops-nix` input in `flake.nix`,
 `sops.age.sshKeyPaths` in `modules/nixos/core.nix`, `.sops.yaml` at the repo
 root). No secret is declared yet, so it's currently a no-op. To add your first one:
 
-## 1. Register a recipient key
+## 1. Recipient keys (already registered)
 
-sops encrypts to an **age** recipient. Derive one from an SSH key:
+`.sops.yaml` encrypts every secret to **two** age recipients, and both are
+needed:
+
+| recipient | source | why |
+| --- | --- | --- |
+| `workstation` | host key `/etc/ssh/ssh_host_ed25519_key` | sops-nix decrypts as root at activation (`sops.age.sshKeyPaths`, `modules/nixos/core.nix`). Without it the machine cannot read its own secrets at boot. |
+| `sebastianstupak` | standalone age key `~/.config/sops/age/keys.txt` | `sops` runs as you and cannot read the root-owned host key. Without it you could create a secret and never reopen it. |
+
+The user recipient is a standalone age key rather than one derived from
+`~/.ssh/id_ed25519`: that key is passphrase-protected, and `ssh-to-age` has no
+passphrase support, so an ssh-derived recipient would encrypt to something
+nothing can decrypt. sops cannot consume the ssh key as an age identity either.
+
+`~/.config/sops/age/keys.txt` is **not** in this repo and is not reproducible —
+it is machine-local secret material, mode 600. Back it up somewhere safe: lose
+it and you can still decrypt via the host key with `sudo`, but lose both and
+the secrets are gone. Regenerate a replacement with `age-keygen`, then update
+`.sops.yaml` and run `sops updatekeys secrets/<file>`.
+
+To re-derive the values:
 
 ```bash
-# from your user key
-nix run nixpkgs#ssh-to-age -- -i ~/.ssh/id_ed25519.pub
-# or the host key (matches core.nix), after the machine is installed
-nix run nixpkgs#ssh-to-age -- -i /etc/ssh/ssh_host_ed25519_key.pub
+nix run nixpkgs#ssh-to-age -- -i /etc/ssh/ssh_host_ed25519_key.pub  # host
+grep 'public key' ~/.config/sops/age/keys.txt                       # user
 ```
-
-Paste the resulting `age1...` value into `.sops.yaml`, replacing the placeholder.
 
 ## 2. Create an encrypted file
 

@@ -23,6 +23,14 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # System-wide theming (base16 scheme -> GTK/Qt/terminal/editor/bar/etc).
+    # Pin to the release branch matching nixpkgs, or targets drift against
+    # option renames (e.g. regreet moving under services.displayManager).
+    stylix = {
+      url = "github:nix-community/stylix/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -32,6 +40,7 @@
       home-manager,
       sops-nix,
       treefmt-nix,
+      stylix,
       ...
     }@inputs:
     let
@@ -54,6 +63,7 @@
             hostModule
             home-manager.nixosModules.home-manager
             sops-nix.nixosModules.sops
+            stylix.nixosModules.stylix
           ];
         };
     in

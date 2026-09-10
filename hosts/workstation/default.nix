@@ -6,6 +6,7 @@
     ./hardware-configuration.nix
     ../../modules/nixos # baseline (core)
     ../../modules/nixos/desktop.nix # Hyprland graphical session
+    ../../modules/nixos/stylix.nix # system-wide theming (Kanagawa)
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/containers.nix # docker
   ];

@@ -49,11 +49,43 @@
 
       decoration.rounding = 6;
 
+      # Hyprland's built-in defaults are cinematic — ~480ms for `windows` and
+      # ~540ms for `border`, which makes focus changes feel laggy even though
+      # focus itself is instant. Speeds are in deciseconds (1 unit = 100ms);
+      # roughly halved here. `windows`/`border`/`fade`/`layers` are parent nodes,
+      # so their children (windowsIn, fadeOut, layersIn, ...) inherit these
+      # unless separately overridden.
+      # To retune without a rebuild: hyprctl keyword animation "windows,1,1.4,snap"
+      animations = {
+        enabled = true;
+        bezier = [
+          "snap, 0.2, 1, 0.2, 1" # hard ease-out: moves immediately, settles fast
+          "linear, 0, 0, 1, 1"
+        ];
+        animation = [
+          "windows, 1, 2.2, snap, popin 92%"
+          "windowsOut, 1, 1.6, snap, popin 92%"
+          "border, 1, 2, linear"
+          "fade, 1, 1.6, snap"
+          "layers, 1, 1.8, snap, popin 95%"
+          "workspaces, 1, 1.8, snap, slidefade 15%"
+        ];
+      };
+
       bind = [
         "$mod, Return, exec, $terminal"
         "$mod, Q, killactive"
         "$mod, E, exec, nautilus"
-        "$mod, R, exec, $menu"
+        # Toggle, not just launch: wofi has no single-instance flag, so pressing
+        # $mod+R twice would stack a second launcher on top of the first. pkill
+        # exits 1 when nothing matched (-> open it), 0 when it killed one
+        # (-> stays closed). Hyprland runs exec through sh -c, so `||` works.
+        # Deliberately NOT `pkill -x wofi`: on NixOS the running process is
+        # `.wofi-wrapped` (Nix's wrapper), so an exact match finds NOTHING and
+        # the toggle silently degrades back to stacking instances. The substring
+        # match catches both the wrapped and unwrapped names. Keep the pattern
+        # short — procps matches against comm, which is capped at 15 chars.
+        "$mod, R, exec, pkill wofi || $menu"
         "$mod, V, togglefloating"
         "$mod, F, fullscreen"
         "$mod, L, exec, hyprlock"

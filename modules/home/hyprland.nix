@@ -88,7 +88,11 @@
         # against comm, which is capped at 15 chars.
         "$mod, R, exec, pkill fuzzel || $menu"
         "$mod, V, togglefloating"
-        "$mod, F, fullscreen"
+        # Two fullscreen modes: 0 (default) is true fullscreen — covers the bar
+        # and gaps. 1 is "maximize": fills the workspace but keeps waybar and
+        # the gaps, which is what you usually want for a wide editor/browser.
+        "$mod, F, fullscreen, 0"
+        "$mod SHIFT, F, fullscreen, 1"
         "$mod, L, exec, hyprlock"
         "$mod SHIFT, X, exec, wlogout" # power menu
         "$mod, C, exec, cliphist list | fuzzel --dmenu | cliphist decode | wl-copy" # clipboard history
@@ -99,16 +103,6 @@
         "$mod, up, movefocus, u"
         "$mod, down, movefocus, d"
 
-        # workspaces
-        "$mod, 1, workspace, 1"
-        "$mod, 2, workspace, 2"
-        "$mod, 3, workspace, 3"
-        "$mod, 4, workspace, 4"
-        "$mod SHIFT, 1, movetoworkspace, 1"
-        "$mod SHIFT, 2, movetoworkspace, 2"
-        "$mod SHIFT, 3, movetoworkspace, 3"
-        "$mod SHIFT, 4, movetoworkspace, 4"
-
         # region screenshot to clipboard
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
         # Windows-style snipping tool: region screenshot -> annotate (swappy)
@@ -118,7 +112,15 @@
         ", XF86AudioPlay, exec, playerctl play-pause"
         ", XF86AudioNext, exec, playerctl next"
         ", XF86AudioPrev, exec, playerctl previous"
-      ];
+      ]
+      # Workspaces 1-9: $mod+N focuses it, $mod+SHIFT+N sends the focused window
+      # there. Generated rather than written out 18 times — the two lines below
+      # are the whole spec. `movetoworkspace` follows the window to the new
+      # workspace; swap in `movetoworkspacesilent` to stay put instead.
+      ++ builtins.concatMap (n: [
+        "$mod, ${n}, workspace, ${n}"
+        "$mod SHIFT, ${n}, movetoworkspace, ${n}"
+      ]) (builtins.genList (i: toString (i + 1)) 9);
 
       bindm = [
         "$mod, mouse:272, movewindow"

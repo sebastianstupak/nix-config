@@ -12,24 +12,10 @@ as a NixOS module, secrets via [sops-nix](https://github.com/Mic92/sops-nix).
 
 > Working with an AI agent (or want the conventions)? Read **[AGENTS.md](./AGENTS.md)**.
 
-## First-time setup (on the laptop)
+## Installing from scratch
 
-1. Install NixOS and clone this repo:
-   ```bash
-   git clone https://github.com/sebastianstupak/nix-config.git ~/nix-config
-   cd ~/nix-config
-   ```
-2. Generate this machine's hardware config (replaces the committed placeholder):
-   ```bash
-   sudo nixos-generate-config --show-hardware-config \
-     > hosts/workstation/hardware-configuration.nix
-   git add hosts/workstation/hardware-configuration.nix
-   ```
-3. Pick a desktop environment in `modules/nixos/desktop.nix` (uncomment a block).
-4. Build and switch:
-   ```bash
-   sudo nixos-rebuild switch --flake .#workstation
-   ```
+Full step-by-step for a fresh install (wipe → NixOS, partitioning, hardware
+config, first boot, secrets, audio): **[docs/INSTALL.md](./docs/INSTALL.md)**.
 
 ## Day-to-day
 

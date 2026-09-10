@@ -276,6 +276,42 @@ let
     '';
   };
 
+  # Click target for the backlight module: toggles the night light (warm screen).
+  #
+  # Talks to the hyprsunset daemon over hyprctl rather than starting and killing
+  # the process, because a pkill toggle depends on hyprsunset restoring the colour
+  # transform matrix on the way out — if it is ever killed hard, or dies, the
+  # screen stays tinted with nothing left running to fix it. The daemon (started
+  # --identity in hyprland.nix) always owns the CTM, and this only sends requests.
+  #
+  # State lives in a file because hyprsunset exposes no way to ask what
+  # temperature is currently applied, so the toggle has to remember. Kept in
+  # XDG_RUNTIME_DIR so a reboot resets it to "off", which matches the daemon
+  # coming back up at identity.
+  nightLightScript = pkgs.writeShellApplication {
+    name = "waybar-nightlight";
+    # hyprctl is deliberately NOT vendored here. Adding pkgs.hyprland would pull
+    # a second copy of the compositor into the closure and hand this script an
+    # hyprctl from a possibly different version than the one running — the exact
+    # trap `package = null` avoids at the top of hyprland.nix. writeShellApplication
+    # keeps the inherited PATH (inheritPath defaults true), so this resolves
+    # /run/current-system/sw/bin/hyprctl: the system Hyprland's own.
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      state="''${XDG_RUNTIME_DIR:-/tmp}/hyprsunset.state"
+
+      if [ "$(cat "$state" 2>/dev/null)" = "on" ]; then
+        hyprctl hyprsunset identity
+        printf 'off\n' > "$state"
+      else
+        # 3500K: clearly warm without going orange enough to make syntax
+        # highlighting unreadable. 4000-4500 is subtler, 2500 is candlelight.
+        hyprctl hyprsunset temperature 3500
+        printf 'on\n' > "$state"
+      fi
+    '';
+  };
+
   # Feeds custom/vpn. Shows a tunnel only while one is actually up, and hides
   # itself otherwise — the `network` module already covers plain connectivity, so
   # a permanent "VPN: off" chip would be clutter. Flip the early-exit below if you
@@ -786,6 +822,12 @@ in
         # (modules/nixos/laptop.nix).
         on-scroll-up = "brightnessctl set 5%+";
         on-scroll-down = "brightnessctl set 5%-";
+        # Click toggles the night light. Scroll already owns brightness, so click
+        # was free, and "how warm is the screen" belongs with "how bright is the
+        # screen" rather than in a module of its own.
+        on-click = lib.getExe nightLightScript;
+        # tooltip stays off: the tint IS the feedback, and a tooltip would have to
+        # duplicate state the script already has to track in a file.
         tooltip = false;
       };
 

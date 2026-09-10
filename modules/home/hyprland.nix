@@ -28,6 +28,13 @@
       # two bars.
       exec-once = [
         "hypridle"
+        # Night light daemon. Started with --identity so it applies NO colour
+        # change until asked: hyprsunset's own default is 6000K, which is already
+        # slightly warm and would tint the screen from login. It has to run
+        # continuously because `hyprctl hyprsunset` talks to its socket
+        # (.hyprsunset.sock) — the toggle on waybar's backlight module is a
+        # request to this daemon, not a new process.
+        "hyprsunset --identity"
         # No nm-applet: it existed only for its tray icon, which duplicated
         # waybar's own `network` module (two network indicators side by side).
         # It was also NetworkManager's secret agent (D-Bus name
@@ -252,6 +259,7 @@
     wl-clipboard # wl-copy / wl-paste
     cliphist # clipboard history
     wlogout # power menu
+    hyprsunset # night light daemon; toggled from waybar's backlight module
     pavucontrol # audio device / volume GUI
     networkmanagerapplet # nm-connection-editor (nm-applet itself is unused now)
     nautilus # file manager

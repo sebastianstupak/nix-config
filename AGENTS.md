@@ -130,6 +130,11 @@ global git-hook setup). The Nix tools come from the dev shell (`flake.nix` →
 - Each lefthook job is **guarded** — it no-ops (exit 0) when its tool isn't on
   PATH (e.g. a Windows checkout without Nix), so hooks never block a commit
   off-NixOS. When the tool is present, its real failure blocks the commit/push.
+- **`nix flake check`** also validates the generated Hyprland config: the
+  `hyprland-config` check runs `Hyprland --verify-config` on it (catches bad
+  binds/dispatchers). Note: the home-manager hyprland module defaults to a Lua
+  config on `stateVersion >= 26.05` and its Lua serializer mangles hyprlang
+  strings — we pin `configType = "hyprlang"` in `modules/home/hyprland.nix`.
 - **Editing `lefthook.yml`:** keep every `run:` a single line with **no embedded
   quotes** — lefthook's Windows arg-parser mangles quoted/multiline commands.
 - **Bypass once:** `git commit --no-verify` (or `LEFTHOOK=0` to skip only lefthook).

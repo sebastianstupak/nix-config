@@ -81,7 +81,7 @@ modules/nixos/                System modules — core (baseline, always imported
                               + opt-in profiles: desktop (Hyprland), stylix (theming),
                               laptop (power/bt/fw), containers (docker)
 modules/home/                 home-manager modules: shell, cli, terminal, editor,
-                              browsers, git, dev, hyprland
+                              browsers, office, proton, media, comms, git, dev, hyprland
 home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
 ```

@@ -65,7 +65,7 @@ Commit messages follow **Conventional Commits** — `type(scope): description`
 | `flake.nix` | Inputs and `nixosConfigurations` (via the `mkHost` helper) |
 | `hosts/<host>/` | Per-machine config: imports the profiles it needs + hardware config |
 | `modules/nixos/` | System modules: `core` (baseline) + opt-in `desktop`/`stylix`/`laptop`/`containers` |
-| `modules/home/` | home-manager modules: shell, cli, terminal, editor, browsers, git, dev, hyprland |
+| `modules/home/` | home-manager modules: shell, cli, terminal, editor, browsers, office, proton, media, comms, git, dev, hyprland |
 | `home/<user>/` | Per-user home-manager config (identity) |
 | `.githooks/` + `scripts/` | Committed git hooks + the Conventional Commits check |
 | `lefthook.yml` | pre-commit / pre-push linters (see [AGENTS.md](./AGENTS.md)) |

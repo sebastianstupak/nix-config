@@ -1,6 +1,11 @@
 # System configuration for host "workstation" (HP laptop, daily driver).
 # Composes: this host's hardware + the shared NixOS modules + home-manager.
-{ inputs, pkgs, ... }:
+{
+  config,
+  inputs,
+  pkgs,
+  ...
+}:
 {
   imports = [
     ./hardware-configuration.nix
@@ -10,6 +15,7 @@
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/containers.nix # docker
     ../../modules/nixos/netbird.nix # mesh VPN
+    ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)
     # TEMPORARILY DISABLED for a fast rebuild — re-enable once the desktop is up.
     # It pulls shibco/ableton-linux (patched Wine, big from-source build).
     # ../../modules/nixos/audio.nix # pro-audio + Ableton (shibco/ableton-linux)
@@ -21,11 +27,36 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
-  # Primary user. Set a password after first boot with `passwd`, or manage it via sops.
+  # Cap boot entries. The ESP here is 1G and each distinct kernel+initrd pair in
+  # it costs ~24M, so an uncapped list is a slow leak on a machine that gets
+  # rebuilt a dozen times a day. nix.gc prunes system generations after 30 days,
+  # which bounds it eventually — but the failure mode if it ever does fill is a
+  # switch that dies partway through writing the ESP, which is a bad place to be
+  # stranded. 20 keeps well over a month of rollback targets.
+  boot.loader.systemd-boot.configurationLimit = 20;
+
+  # Primary user.
+  #
+  # `mutableUsers` is left at its default of TRUE, which is what makes wiring
+  # hashedPasswordFile safe to do before the hash is real. update-users-groups.pl
+  # applies a declarative hash to an EXISTING user only when mutableUsers is
+  # false (`$sp_pwdp = ... if defined $u->{hashedPassword} && !$spec->{mutableUsers}`)
+  # — so on this machine the password you already set with `passwd` keeps
+  # working and this line changes nothing, while a fresh install creates the user
+  # straight from the hash. That is the reproducibility win with no way to lock
+  # yourself out of your own laptop.
+  #
+  # A missing file only warns; it does not fail the rebuild.
+  #
+  # TO FINISH: put a real hash in place, verify you can log in AND sudo with it,
+  # and only then set `users.mutableUsers = false` to make it authoritative:
+  #   mkpasswd -m yescrypt        # then paste into:
+  #   sops secrets/passwords.yaml
   users.users.sebastianstupak = {
     isNormalUser = true;
     description = "Sebastian Stupak";
     shell = pkgs.zsh;
+    hashedPasswordFile = config.sops.secrets.sebastianstupak-hash.path;
     extraGroups = [
       "wheel" # sudo
       "networkmanager"
@@ -50,6 +81,15 @@
   # Explicit `key`, so the /run/secrets name can be self-describing while the
   # YAML key stays short.
   sops.secrets = {
+    # Login password hash. Root-owned 0400 is correct here — unlike the calendar
+    # URLs, the reader is update-users-groups.pl running as root, not a user unit.
+    sebastianstupak-hash = {
+      sopsFile = ../../secrets/passwords.yaml;
+      key = "sebastianstupak-hash";
+      # Available before users are set up, not just after activation.
+      neededForUsers = true;
+    };
+
     calendar-work-url = {
       sopsFile = ../../secrets/calendars.yaml;
       key = "work-url";

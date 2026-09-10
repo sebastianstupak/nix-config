@@ -36,13 +36,7 @@
       input = {
         kb_layout = "us,sk";
         kb_options = "grp:alt_shift_toggle"; # Alt+Shift cycles US <-> SK (Windows-style)
-        # 2 = "loose": hovering a window still routes mouse events there, but
-        # keyboard focus only moves when you click. Deliberately not 1 — under
-        # full follow-mouse, the launcher's click-away dismissal is unusable,
-        # because the pointer resting over any other window steals focus and
-        # fuzzel exits on its own (see keyboard-focus in programs.fuzzel below).
-        # Trade-off: you must click a window before typing into it.
-        follow_mouse = 2;
+        follow_mouse = 1;
         touchpad.natural_scroll = true;
       };
 
@@ -177,18 +171,22 @@
         terminal = "ghostty -e";
         # Above fullscreen windows, so $mod+R works over a maximized app.
         layer = "overlay";
-        # Dismiss on click-away. Requires BOTH halves:
-        #   - on-demand here, so fuzzel focuses like a normal window and can
-        #     observe a focus loss at all (the default `exclusive` locks
-        #     keyboard focus, so a click elsewhere never registers), and
-        #   - input.follow_mouse = 2 above.
-        # With follow_mouse = 1 this combination is unusable: merely having the
-        # pointer parked over another window steals focus and fuzzel exits
-        # within ~2s of opening. fuzzel.ini(5) warns about exactly this.
-        # Measured: follow_mouse=1 + cursor away -> died 1 of 2 launches;
-        # follow_mouse=2 -> survived 3 of 3, and closed 3 of 3 on focus change.
-        keyboard-focus = "on-demand";
-        exit-on-keyboard-focus-loss = true;
+        # Default `exclusive` keyboard focus. Click-away dismissal is NOT
+        # reachable through fuzzel/Hyprland settings alone — all three
+        # combinations were measured on this machine:
+        #   exclusive                      opens reliably; click never closes it
+        #                                  (layers_hog_keyboard_focus keeps the
+        #                                  layer's keyboard focus across clicks)
+        #   on-demand + follow_mouse=1     dies ~2s after opening whenever the
+        #                                  pointer rests over another window
+        #   on-demand + follow_mouse=2     opens reliably, but a real click
+        #                                  still does not close it — only an
+        #                                  explicit `hyprctl dispatch
+        #                                  focuswindow` does
+        # Setting misc:layers_hog_keyboard_focus=false does not help either: it
+        # reintroduces the die-on-open behaviour without fixing the click.
+        # Escape dismisses. A socket2 listener reacting to Hyprland's
+        # openlayer/activewindow events is the only way to get true click-away.
       };
       # Rounded to match decoration.rounding; layer surfaces don't inherit it.
       border = {

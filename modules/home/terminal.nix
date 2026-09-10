@@ -1,16 +1,18 @@
-# Terminal emulator: kitty (GPU-accelerated, first-class Wayland support).
+# Terminal emulator: Ghostty (GPU-accelerated, native Wayland, great Nix module).
+# Install from nixpkgs (not the upstream flake) to avoid Wayland/OpenGL ABI
+# issues; the system enables hardware.graphics so the desktop-launch GL path works.
 { ... }:
 {
-  programs.kitty = {
+  programs.ghostty = {
     enable = true;
-    font = {
-      name = "JetBrainsMono Nerd Font";
-      size = 12;
-    };
+    enableZshIntegration = true;
+    installVimSyntax = true;
     settings = {
-      enable_audio_bell = false;
-      confirm_os_window_close = 0;
-      background_opacity = "0.95";
+      font-family = "JetBrainsMono Nerd Font";
+      font-size = 12;
+      background-opacity = 0.95;
+      # theme is set by the theming layer (Stylix/Catppuccin) once chosen;
+      # until then Ghostty uses its built-in default.
     };
   };
 }

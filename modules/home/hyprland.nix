@@ -12,7 +12,7 @@
 
     settings = {
       "$mod" = "SUPER";
-      "$terminal" = "kitty";
+      "$terminal" = "ghostty";
       "$menu" = "wofi --show drun";
 
       monitor = ",preferred,auto,1";
@@ -27,7 +27,8 @@
       ];
 
       input = {
-        kb_layout = "us"; # add "sk" here (kb_layout = "us,sk") to toggle layouts
+        kb_layout = "us,sk";
+        kb_options = "grp:win_space_toggle"; # Super+Space cycles US <-> SK
         follow_mouse = 1;
         touchpad.natural_scroll = true;
       };

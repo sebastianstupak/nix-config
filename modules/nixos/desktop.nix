@@ -6,6 +6,10 @@
   # hyprland xdg-desktop-portal automatically.
   programs.hyprland.enable = true;
 
+  # GPU/OpenGL stack — needed for Ghostty's desktop-launch GL path and general
+  # Wayland acceleration.
+  hardware.graphics.enable = true;
+
   # Login manager: greetd + tuigreet, launching Hyprland directly.
   services.greetd = {
     enable = true;

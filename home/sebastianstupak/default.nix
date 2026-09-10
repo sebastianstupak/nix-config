@@ -47,7 +47,12 @@
       order = 10;
       feeds = {
         # Outlook/Teams, via Calendar settings ▸ Shared calendars ▸ Publish.
-        outlook.urlFile = osConfig.sops.secrets.calendar-work-url.path;
+        outlook = {
+          # Names the calendar in GNOME Calendar's sidebar, and tags events in
+          # the bar tooltip once a group holds more than one feed.
+          label = "Work (Outlook)";
+          urlFile = osConfig.sops.secrets.calendar-work-url.path;
+        };
         # outlook-team = {
         #   label = "Team";
         #   urlFile = osConfig.sops.secrets.calendar-work-team-url.path;
@@ -64,7 +69,10 @@
       order = 20;
       feeds = {
         # Proton, via Calendar ▸ Settings ▸ Share ▸ Share with anyone.
-        proton.urlFile = osConfig.sops.secrets.calendar-personal-url.path;
+        proton = {
+          label = "Personal (Proton)";
+          urlFile = osConfig.sops.secrets.calendar-personal-url.path;
+        };
         # proton-family = {
         #   label = "Family";
         #   urlFile = osConfig.sops.secrets.calendar-family-url.path;

@@ -82,13 +82,122 @@ let
 
   enabled = feeds != { };
 
-  basePath = "${config.xdg.dataHome}/calendars";
+  # ONE mirror, two readers. vdirsyncer writes each feed straight into the
+  # directory layout radicale serves from, so:
+  #
+  #   feed ──vdirsyncer──▶ <collections>/<feed>/*.ics ──▶ khal ──▶ waybar counters
+  #                                     └──▶ radicale (localhost) ──▶ GNOME Calendar
+  #
+  # The alternative — letting GNOME Calendar subscribe to the upstream URLs
+  # itself — fetched everything twice and let the week view and the bar disagree
+  # about what "today" holds, which is exactly the kind of drift you cannot debug
+  # by looking at either one. This way there is a single fetch and a single copy.
+  #
+  # radicale's layout is <filesystem_folder>/collection-root/<user>/<collection>
+  # (see _get_collection_root_folder in its multifilesystem storage), and a
+  # collection is any directory holding a .Radicale.props that tags it
+  # VCALENDAR. That is byte-compatible with what vdirsyncer's filesystem storage
+  # produces — one .ics per item — so nothing has to translate between them.
+  radicaleRoot = "${config.xdg.dataHome}/radicale";
+  basePath = "${radicaleRoot}/collection-root/${config.home.username}";
 
-  # Kept under basePath rather than in vdirsyncer's usual $XDG_DATA_HOME spot so
-  # that one option can hand it to the bar script: vdirsyncer rewrites
-  # <pair>.items on every successful sync — even a no-op one — which makes its
-  # mtime the honest "last synced" marker per calendar.
-  statusPath = "${basePath}/.vdirsyncer-status";
+  # Deliberately NOT under basePath any more: everything in there is served by
+  # radicale, and vdirsyncer's status files are not calendars.
+  statusPath = "${config.xdg.dataHome}/vdirsyncer-status";
+
+  # localhost only, and note there is no authentication: radicale is reachable
+  # from this machine alone, by the one account that already owns the files it
+  # serves. Adding htpasswd would mean generating and storing a password for the
+  # user to hand back to themselves.
+  radicalePort = 5232;
+
+  radicaleConfig = pkgs.writeText "radicale.conf" ''
+    [server]
+    hosts = localhost:${toString radicalePort}
+
+    [auth]
+    type = none
+
+    [storage]
+    filesystem_folder = ${radicaleRoot}
+
+    [logging]
+    level = warning
+  '';
+
+  # Marks each vdir as a calendar collection for radicale, and names it. Written
+  # at activation rather than by hand: radicale creates these itself only for
+  # collections made THROUGH it, and these are made by vdirsyncer behind its
+  # back. Idempotent, and it leaves any other key radicale adds later alone by
+  # only writing when the file is missing or lacks the VCALENDAR tag.
+  collectionProps = lib.concatStringsSep "\n" (
+    lib.mapAttrsToList (name: feed: ''
+      dir=${lib.escapeShellArg "${basePath}/${name}"}
+      props="$dir/.Radicale.props"
+      mkdir -p "$dir"
+      if ! ${pkgs.gnugrep}/bin/grep -qs VCALENDAR "$props"; then
+        printf '%s' ${
+          lib.escapeShellArg (
+            builtins.toJSON {
+              tag = "VCALENDAR";
+              "D:displayname" = feed.label;
+            }
+          )
+        } > "$props"
+        echo "calendar: tagged $dir as a radicale collection"
+      fi
+    '') feeds
+  );
+
+  # GNOME Calendar reads calendars registered with evolution-data-server, and
+  # nothing else — a vdir is invisible to it. So subscribe it to radicale.
+  #
+  # The key-file format is undocumented; this shape is the one that was verified
+  # working end to end (EDS accepted the source, the webcal backend fetched, and
+  # the events landed in ~/.cache/evolution/calendar/<uid>/cache.db):
+  #   * `Parent=` empty. The only stub this EDS build has is local-stub, so a
+  #     web calendar sits at the top level.
+  #   * The URI is assembled from [Security] Method + [Authentication] Host/Port
+  #     + [WebDAV Backend] ResourcePath, not stored as one string.
+  #   * `User=` empty with Method=none. Naming a user makes EDS want credentials
+  #     and the calendar then sits there unauthenticated.
+  edsSources = lib.mapAttrsToList (name: feed: {
+    inherit name;
+    text = ''
+      [Data Source]
+      DisplayName=${feed.label}
+      Enabled=true
+      Parent=
+
+      [Calendar]
+      BackendName=webcal
+      Enabled=true
+      Selected=true
+
+      [Authentication]
+      Host=localhost
+      Method=none
+      Port=${toString radicalePort}
+      RememberPassword=false
+      User=
+
+      [Security]
+      Method=none
+
+      [WebDAV Backend]
+      AvoidIfmatch=false
+      CalendarAutoSchedule=false
+      ResourcePath=/${config.home.username}/${name}/
+      ResourceQuery=
+
+      [Offline]
+      StaySynchronized=true
+
+      [Refresh]
+      Enabled=true
+      IntervalMinutes=30
+    '';
+  }) feeds;
 
   # Same source of truth the waybar counter reads, so the bar cannot end up
   # looking at a different directory than vdirsyncer writes.
@@ -362,6 +471,49 @@ in
     #     answers prompts with EOF, i.e. N, i.e. nothing ever gets created.
     # Creating the directories first turns discover into a silent no-op, so it is
     # safe to re-run ahead of every sync. Bare `discover` covers every pair.
+    # localhost CalDAV/webcal in front of the mirror, so GNOME Calendar reads the
+    # SAME copy the bar counts. A user unit, not services.radicale: that NixOS
+    # option runs as its own system user, which cannot read calendars living
+    # under $HOME.
+    systemd.user.services.radicale = {
+      Unit = {
+        Description = "Radicale, serving the local calendar mirror on localhost";
+        After = [ "network.target" ];
+      };
+      Service = {
+        ExecStart = "${pkgs.radicale}/bin/radicale --config ${radicaleConfig}";
+        Restart = "on-failure";
+        RestartSec = 5;
+      };
+      # default.target, not graphical-session: nothing here needs a display, and
+      # khal/vdirsyncer work the same from a TTY.
+      Install.WantedBy = [ "default.target" ];
+    };
+
+    # Two pieces of state that have to exist as real files rather than store
+    # symlinks, hence activation rather than xdg.configFile:
+    #   * .Radicale.props — radicale rewrites collection metadata in place.
+    #   * the EDS .source files — evolution-data-server rewrites them when you
+    #     recolour or hide a calendar in the UI, and a read-only symlink would
+    #     make every such change fail silently.
+    # The trade is the usual one for merged-not-owned config: delete a calendar
+    # in GNOME Calendar and the next activation puts it back.
+    home.activation.calendarCollections = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      ${collectionProps}
+
+      sources="${config.xdg.configHome}/evolution/sources"
+      run mkdir -p "$sources"
+      ${lib.concatMapStringsSep "
+" (src: ''
+        target="$sources/${src.name}.source"
+        want=${lib.escapeShellArg src.text}
+        if [ ! -e "$target" ] || [ "$(cat "$target")" != "$want" ]; then
+          printf '%s' "$want" > "$target"
+          echo "calendar: subscribed GNOME Calendar to ${src.name} via radicale"
+        fi
+      '') edsSources}
+    '';
+
     systemd.user.services.vdirsyncer.Service.ExecStartPre = [
       "${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArgs (map vdirOf (lib.attrNames feeds))}"
       "${config.services.vdirsyncer.package}/bin/vdirsyncer discover"

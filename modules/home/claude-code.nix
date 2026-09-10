@@ -1,30 +1,30 @@
-# Claude Code settings this machine owns.
+# Claude Code settings this machine owns: notification channel, plus a hook that
+# rings the terminal bell.
 #
-# Only ONE key is managed here, and it is merged rather than written: Claude
-# Code writes to ~/.claude/settings.json itself (theme, and the "you accepted
-# this dialog" flags), so the usual xdg.configFile route would put a read-only
-# store symlink where the app expects a writable file and every in-app settings
-# change would fail. jq-merging one key leaves everything else — including keys
-# added by future versions — untouched.
+# Settings are jq-MERGED, never written wholesale. Claude Code writes to
+# ~/.claude/settings.json itself (theme, the "you accepted this dialog" flags),
+# so an xdg.configFile would put a read-only store symlink where the app expects
+# a writable file and every in-app settings change would fail. Merging leaves
+# everything else — including keys added by future versions — untouched.
 #
-# Why the key matters here: notifications and the waybar workspace badge are
-# different transports, and only one of them reaches the bar.
+# The reason two mechanisms are needed at all: a desktop notification and the
+# waybar workspace badge travel different transports, and no single channel
+# feeds both. All three were measured on this machine:
 #
-#   auto (the default)  Claude Code posts straight to D-Bus. swaync shows it,
-#                       the terminal never learns anything, so no badge.
-#   ghostty             routes it through the terminal, which then raises the
-#                       notification itself — verified, the D-Bus sender becomes
-#                       ghostty rather than Claude Code. Correct attribution,
-#                       but raising a notification is not ringing a bell, so
-#                       still no badge.
-#   terminal_bell       writes BEL. ghostty's bell-features then mark the window
-#                       title and raise attention, which is exactly what
-#                       hyprland/workspaces window-rewrite counts (see
-#                       modules/home/waybar.nix).
+#   auto (the default)  posts straight to D-Bus. swaync shows it, the terminal
+#                       learns nothing, so no badge.
+#   terminal_bell       writes BEL, so the badge fires — but it REPLACES the
+#                       desktop notification rather than adding to it. The D-Bus
+#                       Notify vanished entirely, taking the swaync popup and
+#                       its entry in the notification centre with it.
+#   ghostty             routes through the terminal, which raises the
+#                       notification itself (the D-Bus sender becomes ghostty,
+#                       not Claude Code). Keeps the notification, but raising a
+#                       notification is not ringing a bell, so no badge.
 #
-# Chosen over a Notification hook that shells out to write \a to the session's
-# pty: that works (measured), but it is a custom script standing in for a
-# supported setting, and it would need re-verifying on every Claude Code update.
+# So: `ghostty` for the notification, and the hook below for the bell. The hook
+# is the part that will need re-checking if Claude Code changes how hooks are
+# spawned — the setting alone cannot do both.
 {
   lib,
   pkgs,

@@ -51,6 +51,27 @@
     extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
   };
 
+  # Virtual filesystem layer for Nautilus ($mod+E). udisks2 (on by default) is
+  # what lets a USB stick mount at all; gvfs is what makes the file manager
+  # actually complete. Without it there is no Trash — Nautilus has no
+  # gvfsd-trash to move files into, so deleting is permanent-or-nothing — no
+  # MTP, so a plugged-in phone does nothing, and no SMB/SFTP in the sidebar.
+  services.gvfs.enable = true;
+
+  # Printing. CUPS alone only reaches printers you can name; avahi is what makes
+  # a network printer show up by itself, which is the only mode that matters on
+  # a laptop that visits other people's networks.
+  #
+  # nssmdns4 wires mDNS into NSS so .local names resolve for everything, not
+  # just CUPS. openFirewall opens UDP 5353 — required, since discovery is
+  # inbound multicast and the firewall is on.
+  services.printing.enable = true;
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    openFirewall = true;
+  };
+
   # Calendar/contacts backend for GNOME Calendar (modules/home/calendar.nix).
   # The app itself is a home package, but everything it reads goes through
   # D-Bus-activated evolution-data-server services — without this option there

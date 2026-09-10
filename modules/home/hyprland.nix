@@ -99,8 +99,10 @@
         "$mod SHIFT, X, exec, wlogout" # power menu
         "$mod, C, exec, cliphist list | fuzzel --dmenu | cliphist decode | wl-copy" # clipboard history
 
-        # Waybar signals: USR1 toggles the bar, USR2 reloads config + CSS in
-        # place (so you can iterate on waybar.nix without a full switch).
+        # Waybar signals: USR1 hides/shows the bar (handy for a full-width
+        # editor without leaving true fullscreen). USR2 re-reads config + CSS —
+        # not needed after a rebuild (the unit reloads itself, see waybar.nix),
+        # but it fixes the bar re-laying-out wrong after a monitor hotplug.
         # Plain `pkill waybar`, NOT `pkill -x`: waybar is a wrapped binary, so
         # its comm is `.waybar-wrapped` — an exact match finds nothing. Same
         # trap as fuzzel above; it happens to fit in comm's 15-char cap exactly.

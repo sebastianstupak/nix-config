@@ -11,10 +11,9 @@
     portalPackage = null;
 
     settings = {
-      "$mod" = "SUPER";
-      "$terminal" = "ghostty";
-      "$menu" = "wofi --show drun";
-
+      # NOTE: this Hyprland build uses a Lua-generated config (home-manager writes
+      # hyprland.lua). hyprlang "$var" keys become invalid Lua (`hl.$mod(...)`), so
+      # we do NOT declare $mod/$terminal/$menu — values are inlined below instead.
       monitor = ",preferred,auto,1";
 
       exec-once = [
@@ -44,36 +43,36 @@
       decoration.rounding = 6;
 
       bind = [
-        "$mod, Return, exec, $terminal"
-        "$mod, Q, killactive"
-        "$mod, E, exec, nautilus"
-        "$mod, R, exec, $menu"
-        "$mod, V, togglefloating"
-        "$mod, F, fullscreen"
-        "$mod, L, exec, hyprlock"
-        "$mod SHIFT, X, exec, wlogout" # power menu
-        "$mod, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
+        "SUPER, Return, exec, ghostty"
+        "SUPER, Q, killactive"
+        "SUPER, E, exec, nautilus"
+        "SUPER, R, exec, wofi --show drun"
+        "SUPER, V, togglefloating"
+        "SUPER, F, fullscreen"
+        "SUPER, L, exec, hyprlock"
+        "SUPER SHIFT, X, exec, wlogout" # power menu
+        "SUPER, C, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy" # clipboard history
 
         # focus movement
-        "$mod, left, movefocus, l"
-        "$mod, right, movefocus, r"
-        "$mod, up, movefocus, u"
-        "$mod, down, movefocus, d"
+        "SUPER, left, movefocus, l"
+        "SUPER, right, movefocus, r"
+        "SUPER, up, movefocus, u"
+        "SUPER, down, movefocus, d"
 
         # workspaces
-        "$mod, 1, workspace, 1"
-        "$mod, 2, workspace, 2"
-        "$mod, 3, workspace, 3"
-        "$mod, 4, workspace, 4"
-        "$mod SHIFT, 1, movetoworkspace, 1"
-        "$mod SHIFT, 2, movetoworkspace, 2"
-        "$mod SHIFT, 3, movetoworkspace, 3"
-        "$mod SHIFT, 4, movetoworkspace, 4"
+        "SUPER, 1, workspace, 1"
+        "SUPER, 2, workspace, 2"
+        "SUPER, 3, workspace, 3"
+        "SUPER, 4, workspace, 4"
+        "SUPER SHIFT, 1, movetoworkspace, 1"
+        "SUPER SHIFT, 2, movetoworkspace, 2"
+        "SUPER SHIFT, 3, movetoworkspace, 3"
+        "SUPER SHIFT, 4, movetoworkspace, 4"
 
         # region screenshot to clipboard
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
         # Windows-style snipping tool: region screenshot -> annotate (swappy)
-        "$mod SHIFT, S, exec, grim -g \"$(slurp)\" - | swappy -f -"
+        "SUPER SHIFT, S, exec, grim -g \"$(slurp)\" - | swappy -f -"
 
         # media keys (Spotify, browsers, ... via MPRIS/playerctl)
         ", XF86AudioPlay, exec, playerctl play-pause"
@@ -82,8 +81,8 @@
       ];
 
       bindm = [
-        "$mod, mouse:272, movewindow"
-        "$mod, mouse:273, resizewindow"
+        "SUPER, mouse:272, movewindow"
+        "SUPER, mouse:273, resizewindow"
       ];
 
       # repeatable audio / brightness keys

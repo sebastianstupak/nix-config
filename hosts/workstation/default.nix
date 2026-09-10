@@ -10,7 +10,9 @@
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/containers.nix # docker
     ../../modules/nixos/netbird.nix # mesh VPN
-    ../../modules/nixos/audio.nix # pro-audio + Ableton (shibco/ableton-linux)
+    # TEMPORARILY DISABLED for a fast rebuild — re-enable once the desktop is up.
+    # It pulls shibco/ableton-linux (patched Wine, big from-source build).
+    # ../../modules/nixos/audio.nix # pro-audio + Ableton (shibco/ableton-linux)
   ];
 
   networking.hostName = "workstation";

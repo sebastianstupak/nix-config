@@ -15,6 +15,7 @@
     ./git-hooks.nix
     ./security.nix
     ./dev.nix
+    ./claude-code.nix
     ./hyprland.nix
     ./waybar.nix
     ./notifications.nix

@@ -6,6 +6,7 @@
     ./cli.nix
     ./terminal.nix
     ./editor.nix
+    ./browsers.nix
     ./git.nix
     ./dev.nix
     ./hyprland.nix

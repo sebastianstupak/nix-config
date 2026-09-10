@@ -1,5 +1,6 @@
-# Development tooling. Language toolchains come from per-project `nix develop`
-# shells (nix-direnv auto-loads them); this is the always-available baseline.
+# Development tooling. Per-project toolchains still come from `nix develop` +
+# nix-direnv (the reproducible way); the language packages below are a small
+# always-available baseline for quick, throwaway work.
 { pkgs, ... }:
 {
   programs.direnv = {
@@ -8,8 +9,17 @@
   };
 
   home.packages = with pkgs; [
+    # tools
     gh # GitHub CLI
     lazygit # terminal git UI
     gnumake
+
+    # language toolchains (baseline — prefer per-project devshells)
+    go
+    rustc
+    cargo
+    nodejs
+    python3
+    dotnet-sdk
   ];
 }

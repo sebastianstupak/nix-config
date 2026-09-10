@@ -69,6 +69,11 @@
 
         # region screenshot to clipboard
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
+
+        # media keys (Spotify, browsers, ... via MPRIS/playerctl)
+        ", XF86AudioPlay, exec, playerctl play-pause"
+        ", XF86AudioNext, exec, playerctl next"
+        ", XF86AudioPrev, exec, playerctl previous"
       ];
 
       bindm = [

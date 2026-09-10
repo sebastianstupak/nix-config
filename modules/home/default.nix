@@ -8,6 +8,8 @@
     ./editor.nix
     ./browsers.nix
     ./office.nix
+    ./proton.nix
+    ./media.nix
     ./git.nix
     ./dev.nix
     ./hyprland.nix

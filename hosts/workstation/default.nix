@@ -35,6 +35,33 @@
     ];
   };
 
+  # Calendar feed URLs, decrypted at activation for the user's vdirsyncer timer.
+  # Replace the placeholders with the real links via: sops secrets/calendars.yaml
+  #
+  # Declared HERE rather than in modules/home/calendar.nix because `sops.secrets`
+  # is a NixOS option and that file is a home-manager module. The host is also the
+  # honest owner of "which secrets exist on this machine".
+  #
+  # `owner` is the load-bearing part. sops-nix writes secrets root-owned 0400 by
+  # default, and vdirsyncer runs as a USER unit that reads the file with `cat` —
+  # so without this it would get EPERM and fail in exactly the same way a missing
+  # file does, which is a genuinely confusing thing to debug twice.
+  #
+  # Explicit `key`, so the /run/secrets name can be self-describing while the
+  # YAML key stays short.
+  sops.secrets = {
+    calendar-work-url = {
+      sopsFile = ../../secrets/calendars.yaml;
+      key = "work-url";
+      owner = "sebastianstupak";
+    };
+    calendar-personal-url = {
+      sopsFile = ../../secrets/calendars.yaml;
+      key = "personal-url";
+      owner = "sebastianstupak";
+    };
+  };
+
   # home-manager runs as a NixOS module: one `nixos-rebuild switch` manages the
   # whole machine, with a single generation list and unified rollback.
   home-manager = {

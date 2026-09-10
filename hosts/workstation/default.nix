@@ -10,6 +10,7 @@
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/containers.nix # docker
     ../../modules/nixos/netbird.nix # mesh VPN
+    ../../modules/nixos/audio.nix # pro-audio + Ableton (shibco/ableton-linux)
   ];
 
   networking.hostName = "workstation";

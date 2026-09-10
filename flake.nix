@@ -37,6 +37,11 @@
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Ableton Live + Push on Linux (patched Wine + PipeASIO + Link). Deliberately
+    # NOT following our nixpkgs — its patched Wine is built against its own pinned
+    # nixos-unstable; forcing follows would break that build. See modules/nixos/audio.nix.
+    ableton-linux.url = "github:shibco/ableton-linux";
   };
 
   outputs =

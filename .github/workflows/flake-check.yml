@@ -14,3 +14,33 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
       - name: nix flake check
         run: nix flake check --print-build-logs
+
+  # `nix flake check` only EVALUATES the host, so a package that evaluates fine
+  # and then fails to compile still reaches the laptop at switch time. This job
+  # realises the whole system closure, which is the same thing
+  # `nixos-rebuild build` does locally.
+  #
+  # Separate job, not another step, so the two failure modes stay distinguishable
+  # at a glance: a red check here means "does not build", a red check above means
+  # "does not evaluate / is not formatted".
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # A desktop closure is ~10-15G, mostly substituted from cache rather than
+      # built, and a stock runner does not reliably have room for it. Reclaiming
+      # the preinstalled toolchains first is cheaper than debugging an ENOSPC
+      # halfway through a download. Done inline rather than via a third-party
+      # action to avoid another thing to trust and pin.
+      - name: free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: nixos-rebuild build
+        # --no-link: we only care that it builds, and a result symlink would pin
+        # the closure for no reason.
+        run: |
+          nix build --print-build-logs --no-link \
+            '.#nixosConfigurations.workstation.config.system.build.toplevel'

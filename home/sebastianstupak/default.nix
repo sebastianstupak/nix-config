@@ -12,12 +12,9 @@
     stateVersion = "26.05";
   };
 
-  # Example config — replace/extend with your own programs.
-  programs.git = {
-    enable = true;
-    settings.user = {
-      name = "sebastianstupak";
-      email = "sebastian.stupak@pm.me";
-    };
+  # Per-user git identity (shared git config lives in modules/home/git.nix).
+  programs.git.settings.user = {
+    name = "sebastianstupak";
+    email = "sebastian.stupak@pm.me";
   };
 }

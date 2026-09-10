@@ -173,22 +173,13 @@
         terminal = "ghostty -e";
         # Above fullscreen windows, so $mod+R works over a maximized app.
         layer = "overlay";
-        # Default `exclusive` keyboard focus. Click-away dismissal is NOT
-        # reachable through fuzzel/Hyprland settings alone — all three
-        # combinations were measured on this machine:
-        #   exclusive                      opens reliably; click never closes it
-        #                                  (layers_hog_keyboard_focus keeps the
-        #                                  layer's keyboard focus across clicks)
-        #   on-demand + follow_mouse=1     dies ~2s after opening whenever the
-        #                                  pointer rests over another window
-        #   on-demand + follow_mouse=2     opens reliably, but a real click
-        #                                  still does not close it — only an
-        #                                  explicit `hyprctl dispatch
-        #                                  focuswindow` does
-        # Setting misc:layers_hog_keyboard_focus=false does not help either: it
-        # reintroduces the die-on-open behaviour without fixing the click.
-        # Escape dismisses. A socket2 listener reacting to Hyprland's
-        # openlayer/activewindow events is the only way to get true click-away.
+        # Keyboard focus is left at fuzzel's default (exclusive). Dismissing by
+        # clicking outside is not achievable: fuzzel is layer-shell only, and a
+        # click outside a layer surface is swallowed by it — Hyprland does not
+        # even change activewindow, so nothing can react to it either. Don't
+        # reach for keyboard-focus=on-demand or input.follow_mouse to fix this;
+        # both were tried and only trade the bug for a worse one (the launcher
+        # closing on mere pointer movement). Escape, or $mod+R again, dismisses.
       };
       # Rounded to match decoration.rounding; layer surfaces don't inherit it.
       border = {

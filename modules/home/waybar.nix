@@ -166,6 +166,14 @@ let
       pkgs.jq
     ];
     text = ''
+      # Pinned rather than inherited. glibc resolves TZ against $TZDIR, and when
+      # it cannot find the zone file it does NOT fail — it parses "Asia/Makassar"
+      # as a POSIX TZ spec, yielding UTC with %Z as the literal "Asia". Every row
+      # would then quietly agree with the local clock. The session does export
+      # TZDIR=/etc/zoneinfo today, but a wrong world clock is invisible in a way
+      # a missing one is not, so don't depend on the ambient value.
+      export TZDIR=${pkgs.tzdata}/share/zoneinfo
+
       # label:zone. Bali has no zone of its own — Asia/Makassar IS Indonesia
       # Central (WITA), which is Bali. Slovenia sits on the same offset as
       # Europe/Bratislava, so its row always mirrors the local time; it is here
@@ -224,6 +232,71 @@ let
 
       jq -cn --arg t "$(date '+%H:%M %Z  %Y/%m/%d')" --arg tip "$tooltip" \
         '{text: $t, tooltip: $tip}'
+    '';
+  };
+
+  # Feeds custom/vpn. Shows a tunnel only while one is actually up, and hides
+  # itself otherwise — the `network` module already covers plain connectivity, so
+  # a permanent "VPN: off" chip would be clutter. Flip the early-exit below if you
+  # would rather see an explicit off state.
+  vpnScript = pkgs.writeShellApplication {
+    name = "waybar-vpn";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.iproute2
+      pkgs.jq
+    ];
+    text = ''
+      # Match on kernel device TYPE, not interface name. NetBird uses wt0,
+      # ProtonVPN's WireGuard and OpenVPN modes use different names again, and a
+      # name-prefix match would silently miss whichever one is renamed next.
+      # WireGuard links sit at operstate UNKNOWN rather than UP — filtering on UP
+      # alone reports every WireGuard tunnel as down.
+      tunnels=$(
+        {
+          ip -j link show type wireguard 2>/dev/null || echo '[]'
+          ip -j link show type tun 2>/dev/null || echo '[]'
+        } | jq -s -r 'add // [] | .[]
+              | select(.operstate == "UP" or .operstate == "UNKNOWN")
+              | .ifname' | sort -u
+      )
+
+      if [ -z "$tunnels" ]; then
+        # Empty text hides a custom module.
+        jq -cn '{text: "", tooltip: ""}'
+        exit 0
+      fi
+
+      # Interface names are not self-explanatory (wt0 means nothing at a glance),
+      # so map the ones this machine can produce onto readable labels.
+      label_for() {
+        case "$1" in
+          wt* | nb-*) printf 'NetBird' ;;
+          proton* | pvpn*) printf 'Proton' ;;
+          wg*) printf 'WireGuard' ;;
+          *) printf 'VPN' ;;
+        esac
+      }
+
+      count=$(printf '%s\n' "$tunnels" | wc -l)
+      first=$(printf '%s\n' "$tunnels" | head -n 1)
+      if [ "$count" -eq 1 ]; then
+        text="󰦝 $(label_for "$first")"
+      else
+        text="󰦝 $count tunnels"
+      fi
+
+      tip=""
+      while read -r i; do
+        [ -n "$i" ] || continue
+        addrs=$(ip -j addr show dev "$i" 2>/dev/null |
+          jq -r '.[0].addr_info[]? | select(.family == "inet") | .local' |
+          paste -sd' ' -)
+        tip="$tip$(label_for "$i")  ($i)''${addrs:+  $addrs}
+      "
+      done <<< "$tunnels"
+
+      jq -cn --arg t "$text" --arg tip "$tip" '{text: $t, tooltip: ($tip | rtrimstr("\n"))}'
     '';
   };
 
@@ -349,13 +422,21 @@ in
       ];
       modules-center = [ "hyprland/workspaces" ];
       modules-right = [
+        # First, so a live mic or screenshare lands as far from the busy status
+        # cluster as possible. Self-hides when nothing is capturing.
+        "privacy"
+        # perf and temperature adjacent: both answer "is this machine struggling",
+        # and both use the same green/amber/red scale.
         "custom/perf"
+        "temperature"
         "tray"
         "idle_inhibitor"
         "hyprland/language"
         "backlight"
         "wireplumber"
         "bluetooth"
+        # Next to `network`, since it qualifies what that module is telling you.
+        "custom/vpn"
         "network"
         "battery"
         "custom/power"
@@ -376,11 +457,29 @@ in
         # Verified on this machine — the title genuinely becomes
         # "🔔 ✳ Improve waybar functionality".
         #
-        # Matching on title rather than urgency is deliberate: Hyprland does
-        # emit `urgent` events (it also fires on bell, confirmed), but
-        # `hyprctl clients` exposes no urgent field at all in 0.55.4, so there
-        # is nothing to count per workspace — waybar's own urgent handling is
-        # a single boolean class on the button, not a tally.
+        # This counts ghostty WINDOWS, not panes, and only reflects each
+        # window's ACTIVE surface. Measured on this machine with a two-pane
+        # split and with two tabs:
+        #
+        #   bell in the active pane/tab    -> title marked, badge shows it
+        #   bell in a background pane/tab  -> title NOT marked, badge blind
+        #   bells in both panes            -> still one glyph, undercounted
+        #
+        # That is ghostty's `title` bell-feature working as designed: the window
+        # title belongs to the active surface, so a background surface ringing
+        # cannot change it.
+        #
+        # The gap is covered by the `.urgent` styling in the CSS below rather
+        # than here. ghostty's `attention` bell-feature is independent of
+        # `title`, and it DOES fire for background panes — verified: a bell in a
+        # background pane emitted `urgent>>` on Hyprland's socket while the
+        # title stayed unmarked. So the underline says "something here wants
+        # you" in every case, and the bells add "how many windows" when they can.
+        #
+        # A per-pane count is not reachable: `hyprctl clients` exposes no urgent
+        # field at all in 0.55.4, waybar's urgent handling is a single boolean
+        # class, and neither ghostty nor Hyprland surfaces per-surface state to
+        # an external process.
         window-rewrite = {
           "title<.*🔔.*>" = "󰂚";
         };
@@ -434,6 +533,49 @@ in
       # layout code (us/sk); map it with format-us/format-sk if you want
       # different text. If this ever tracks the wrong device (external keyboard),
       # pin it with `keyboard-name` from `hyprctl devices`.
+      # Mic / screenshare in use. Renders GTK symbolic icons compiled into the
+      # waybar binary as a GResource (resources/icons/waybar_icons.gresource.xml)
+      # — not text glyphs, so there is no nerd-font codepoint to pick here, and
+      # the colour comes from #privacy-item in the CSS below.
+      #
+      # `modules` is left at its default of screenshare + audio-in on purpose.
+      # audio-out is the third available type but would light up for any music
+      # playback, which is not a privacy event and would make the indicator noise.
+      privacy = {
+        icon-size = 14; # 20 by default, which overhangs a bar this height
+        icon-spacing = 6;
+      };
+
+      # CPU package temperature.
+      #
+      # hwmon-path-abs, NOT the default thermal zone: on this machine
+      # thermal_zone0 is acpitz and reports a flat, wrong ~82°C, while the real
+      # sensor is k10temp (AMD). Addressed by the parent device path rather than
+      # /sys/class/hwmon/hwmon4 because hwmonN numbering is not stable across
+      # boots — the number moved would silently point this at the battery or the
+      # NVMe drive. (This PCI address is the AMD SMU; it happens to be the exact
+      # path used as the example in waybar-temperature(5).)
+      #
+      # 80/95 rather than something lower: this is an AMD mobile part that boosts
+      # into the high 80s under a normal `nixos-rebuild` and is designed to, so
+      # amber means "working hard" and red is near the ~95°C Tctl throttle point.
+      # Anything stricter would sit amber during every build.
+      temperature = {
+        hwmon-path-abs = "/sys/devices/pci0000:00/0000:00:18.3/hwmon";
+        input-filename = "temp1_input";
+        warning-threshold = 80;
+        critical-threshold = 95;
+        format = "󰔏 {temperatureC}°C";
+        tooltip-format = "CPU package {temperatureC}°C";
+        interval = 5;
+      };
+
+      "custom/vpn" = {
+        exec = lib.getExe vpnScript;
+        return-type = "json";
+        interval = 10;
+      };
+
       "hyprland/language" = {
         format = "󰌌 {short}";
       };
@@ -673,9 +815,18 @@ in
       #workspaces button.empty {
         color: @base03;
       }
-      /* A workspace with something waiting. The badge glyph from window-rewrite
-         carries the count; this just makes it findable from the corner of the
-         eye.
+      /* A workspace with something waiting.
+
+         This is NOT decoration for the badge — it is the half that catches what
+         the badge cannot see. window-rewrite matches the window title, which
+         only tracks a ghostty window's ACTIVE surface, so a bell in a
+         background pane or tab never marks it. ghostty's `attention` bell
+         feature is separate and fires regardless, which reaches waybar as
+         Hyprland's `urgent` event and lands here. Verified: a background-pane
+         bell produced this underline with no bell glyph beside the number.
+
+         So: underline = "something on this workspace wants you", bells = "how
+         many windows, where the ringing surface was the visible one".
 
          Selector deliberately mirrors Stylix's own `.modules-center #workspaces
          button.urgent` rather than the shorter `#workspaces button.urgent`:
@@ -710,8 +861,39 @@ in
       #custom-clock,
       #custom-meetings,
       #custom-notification,
+      #custom-vpn,
+      #privacy,
       #custom-power {
         padding: 0 5px;
+      }
+
+      /* Privacy: red whenever it is visible. No green/amber tier here because
+         there is no benign state to show — the module hides itself entirely when
+         nothing is capturing, so "present" already means "in use".
+         #privacy-item is the per-type box (set_name in privacy_item.cpp); the
+         icons are -symbolic, so GTK recolours them from this `color`. */
+      #privacy-item {
+        color: @base08;
+      }
+
+      /* Same green/amber/red scale as #custom-perf next to it, but driven by CSS
+         classes rather than inline spans: temperature is a single metric, so the
+         module-wide class that Temperature::update() sets from
+         warning-threshold/critical-threshold expresses it exactly. */
+      #temperature {
+        color: @base0B;
+      }
+      #temperature.warning {
+        color: @base0A;
+      }
+      #temperature.critical {
+        color: @base08;
+      }
+
+      /* Green: visible at all only while a tunnel is up, so it always means
+         "protected". */
+      #custom-vpn {
+        color: @base0B;
       }
 
       /* Nothing left today is the normal state, so it recedes like #mpris does

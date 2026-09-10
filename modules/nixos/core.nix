@@ -18,6 +18,23 @@
     optimise.automatic = true;
   };
 
+  # Compressed swap in RAM. There is no swap DEVICE on this machine —
+  # hardware-configuration.nix is still the placeholder and its `swapDevices` is
+  # empty — so before this the box had no swap at all, and a link step in a big
+  # build (webkitgtk, chromium) could hand the whole session to the OOM killer
+  # instead of pushing cold pages out.
+  #
+  # zram rather than a swapfile because it needs no partitioning and no decision
+  # about where to put it: it trades a little CPU for effective capacity, which
+  # is the right trade on a machine with cores to spare and 16G of RAM.
+  #
+  # This deliberately does NOT enable hibernation — you cannot resume from
+  # compressed swap that lives in the RAM you just powered down. That needs a
+  # real swap device sized to RAM plus a resume kernel arg, which is a per-host
+  # disk-layout decision and belongs in hosts/<host>/ once the real hardware
+  # config exists.
+  zramSwap.enable = true;
+
   # Some firmware/drivers are unfree. Comment out to stay fully free.
   nixpkgs.config.allowUnfree = true;
 

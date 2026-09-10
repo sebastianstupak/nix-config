@@ -93,14 +93,20 @@
         # verifies everything is formatted
         formatting = treefmtEval.config.build.check self;
 
-        # Ensure the generated Hyprland config renders (we force the hyprlang
-        # `hyprland.conf` format via configType — see modules/home/hyprland.nix).
-        # TODO: upgrade to a real hyprlang validator (hyprls / hyprland --verify).
-        hyprland-config = pkgs.runCommand "hyprland-config-check" { } ''
-          cp ${
-            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.conf".source
-          } $out
-        '';
+        # Validate the generated Hyprland config with Hyprland's own offline
+        # checker — `--verify-config` parses and reports errors (unknown
+        # dispatchers, bad binds, unclosed blocks) and exits non-zero on failure,
+        # so a broken config fails `nix flake check` before it reaches the machine.
+        hyprland-config =
+          pkgs.runCommand "hyprland-verify-config" { nativeBuildInputs = [ pkgs.hyprland ]; }
+            ''
+              export HOME="$TMPDIR"
+              export XDG_RUNTIME_DIR="$TMPDIR"
+              Hyprland --config ${
+                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.conf".source
+              } --verify-config
+              touch $out
+            '';
       };
 
       # `nix develop` (or `direnv allow` via .envrc) — dev tooling for this repo:

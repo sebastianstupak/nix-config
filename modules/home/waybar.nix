@@ -10,8 +10,18 @@
 # that can't work on this machine: mpd, custom/media (points at a mediaplayer.py
 # that doesn't exist), battery#bat2, and power-profiles-daemon — which laptop.nix
 # explicitly disables in favour of TLP.
-{ lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
+  # Scheme colors for the CPU/RAM thresholds, so green/amber/red stay in the
+  # Kanagawa Dragon palette instead of being raw #00ff00-style values that clash
+  # with everything else on the bar.
+  colors = config.lib.stylix.colors;
+
   # Feeds custom/perf. A script rather than waybar's built-in cpu/memory modules
   # because those cannot answer "which process?" — their tooltip formats expose
   # only aggregate placeholders ({usage}, {load}, {percentage}), with no hook for
@@ -74,6 +84,25 @@ let
 
       read -r load1 load5 load15 _ < /proc/loadavg
 
+      # CPU and RAM are coloured INDEPENDENTLY, which is why this is inline pango
+      # markup rather than a CSS class: `class` styles the whole module, so it can
+      # only ever express one combined state — a pegged CPU next to idle RAM would
+      # turn both red. waybar renders label markup via set_markup (custom.cpp),
+      # so per-metric <span color> works here.
+      warn_at=70
+      crit_at=90
+      color_for() {
+        if [ "$1" -ge "$crit_at" ]; then
+          printf '#${colors.base08}' # red
+        elif [ "$1" -ge "$warn_at" ]; then
+          printf '#${colors.base0A}' # amber
+        else
+          printf '#${colors.base0B}' # green
+        fi
+      }
+      cpu_color=$(color_for "$cpu")
+      mem_color=$(color_for "$mem_pct")
+
       # Tooltips are pango markup, so a process called "foo&bar" would silently
       # break the whole tooltip. Escape & first, or it would re-escape its own
       # output from the later substitutions.
@@ -88,24 +117,107 @@ let
         ' | esc
       }
 
-      tooltip=$(printf '<b>CPU</b>  %s%%   load %s %s %s\n<b>RAM</b>  %s / %s GiB (%s%%)   swap %s%%\n\n<tt><b>  cpu     ram   top by CPU</b>\n%s</tt>\n<tt><b>  cpu     ram   top by RAM</b>\n%s</tt>\n<i>Click for btop</i>' \
-        "$cpu" "$load1" "$load5" "$load15" \
-        "$mem_used" "$mem_total" "$mem_pct" "$swap_pct" \
+      # Same colours in the tooltip header, so hovering confirms what the bar
+      # colour is telling you rather than restating it in plain grey.
+      tooltip=$(printf '<b>CPU</b>  <span color="%s"><b>%s%%</b></span>   load %s %s %s\n<b>RAM</b>  <span color="%s"><b>%s%%</b></span>  %s / %s GiB   swap %s%%\n\n<tt><b>  cpu     ram   top by CPU</b>\n%s</tt>\n<tt><b>  cpu     ram   top by RAM</b>\n%s</tt>\n<i>Click for btop</i>' \
+        "$cpu_color" "$cpu" "$load1" "$load5" "$load15" \
+        "$mem_color" "$mem_pct" "$mem_used" "$mem_total" "$swap_pct" \
         "$(top_by pcpu)" "$(top_by pmem)")
 
-      # Drives #custom-perf.warning / .critical in the CSS below.
+      text=$(printf '<span color="%s">󰻠 %s%%</span>  <span color="%s">󰍛 %s%%</span>' \
+        "$cpu_color" "$cpu" "$mem_color" "$mem_pct")
+
+      # Still emitted for CSS that wants to react to the module as a whole (a
+      # background, a border) — but NOT for colour, which the spans above own per
+      # metric. Worst-of-the-two, so it escalates when either one does.
       class=ok
-      if [ "$cpu" -ge 90 ] || [ "$mem_pct" -ge 90 ]; then
+      if [ "$cpu" -ge "$crit_at" ] || [ "$mem_pct" -ge "$crit_at" ]; then
         class=critical
-      elif [ "$cpu" -ge 70 ] || [ "$mem_pct" -ge 70 ]; then
+      elif [ "$cpu" -ge "$warn_at" ] || [ "$mem_pct" -ge "$warn_at" ]; then
         class=warning
       fi
 
       # jq builds the JSON so newlines/quotes/markup in the tooltip are escaped
       # correctly — hand-rolled printf JSON breaks the moment a process name has
       # a quote in it.
-      jq -cn --arg t "󰻠 $cpu%  󰍛 $mem_pct%" --arg tip "$tooltip" --arg c "$class" \
+      jq -cn --arg t "$text" --arg tip "$tooltip" --arg c "$class" \
         '{text: $t, tooltip: $tip, class: $c}'
+    '';
+  };
+
+  # Feeds custom/meetings: how many of today's meetings are still ahead. Reads
+  # the local mirror of the Proton feed — modules/home/calendar.nix owns how it
+  # gets there, and both paths below are derived from the same options it
+  # configures vdirsyncer with, so the bar cannot drift from the syncer.
+  #
+  # khal rather than reading the .ics files here: a vdir holds raw VEVENTs, so
+  # anything hand-rolled would have to expand RRULEs and resolve VTIMEZONEs
+  # itself — a daily standup would either vanish or show up once, in 2019. khal
+  # does both already, and `--json` (0.14+) hands back fields instead of the
+  # human table that older waybar recipes scrape with awk.
+  meetingsScript = pkgs.writeShellApplication {
+    name = "waybar-meetings";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.khal
+      pkgs.jq
+    ];
+    text = ''
+      status=${lib.escapeShellArg "${config.accounts.calendar.basePath}/.vdirsyncer-status/proton.items"}
+
+      # Freshness first, because a frozen count is worse than no count: Proton's
+      # share links are documented to stop feeding third-party clients after a
+      # while, and the only symptom is a number that quietly stops moving.
+      # vdirsyncer rewrites this file on every successful sync, including no-op
+      # ones, so its mtime is the real "last synced".
+      stale=no
+      if [ -f "$status" ]; then
+        mins=$(( ( $(date +%s) - $(stat -c %Y "$status") ) / 60 ))
+        synced="$mins min ago"
+        [ "$mins" -gt 720 ] && stale=yes
+      else
+        synced="never"
+        stale=yes
+      fi
+
+      # `today 1d` means today ONLY — the range argument is a length, not an end
+      # date. Asking for fields rather than a format string so the filter below
+      # can read them; khal accepts --json repeatedly.
+      if ! events=$(khal list --json title --json start-time --json end-time \
+                              --json end today 1d 2>&1); then
+        jq -cn --arg err "$events" \
+          '{text: "󰃭 ?", tooltip: ("khal could not read the calendar:\n" + $err),
+            class: "error"}'
+        exit 0
+      fi
+
+      # Filtering on `end`, not `start`: a meeting you are sitting in is still
+      # one of today's meetings, and --notstarted is no help — it filters against
+      # the START of the range (00:00 today), so it keeps everything. `end`
+      # carries the date as well as the time, which also gets the 23:45 event
+      # ending at 00:00 right; comparing bare clock times would drop it.
+      #
+      # All-day entries are excluded by the empty start-time: they are not
+      # meetings, and counting them would put a permanent +1 on the bar.
+      jq -cn --argjson evs "$events" --arg now "$(date '+%Y-%m-%d %H:%M')" \
+             --arg synced "$synced" --arg stale "$stale" '
+        def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+        [ $evs[] | select(."start-time" != "" and .end > $now) ] as $left
+        | ($left | length) as $n
+        | {
+            text: "󰃭 \($n)",
+            tooltip: (
+              (if $n == 0 then "<b>Nothing left today</b>"
+               else "<b>\($n) left today</b>\n"
+                    + ([ $left[] | "  \(."start-time")–\(."end-time")  \(.title | esc)" ]
+                       | join("\n"))
+               end)
+              + "\n<i>Synced \($synced)"
+              + (if $stale == "yes" then " — check systemctl --user status vdirsyncer" else "" end)
+              + "</i>"
+            ),
+            class: (if $stale == "yes" then "stale" elif $n == 0 then "none" else "ok" end),
+          }'
     '';
   };
 in
@@ -143,6 +255,8 @@ in
       # places, and a centred title fights the workspaces for the same space.
       modules-left = [
         "clock"
+        "custom/meetings"
+        "custom/notification"
         "mpris"
       ];
       modules-center = [ "hyprland/workspaces" ];
@@ -237,7 +351,16 @@ in
           "󰖀"
           "󰕾"
         ];
-        on-click = "pavucontrol";
+        # Left-click mutes/unmutes, matching what the speaker icon looks like it
+        # should do; pavucontrol moves to right-click. Same left=act,
+        # right=manage split as the network module below.
+        #
+        # `on-click` is safe to set here even though `on-scroll-*` is not — only
+        # the scroll handler has the early-return that bypasses the module's
+        # volume clamping. Wireplumber implements no click handler of its own, so
+        # there is no built-in behaviour to lose.
+        on-click = "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle";
+        on-click-right = "pavucontrol";
         # Scrolling is handled by the module's OWN handler, deliberately: do NOT
         # add on-scroll-up/on-scroll-down here. Wireplumber::handleScroll starts
         # with `if (on-scroll-up || on-scroll-down) return AModule::handleScroll`
@@ -305,11 +428,15 @@ in
       };
 
       # First module in modules-left, so this is the top-left corner of the
-      # screen. Date is spelled out as %Y %m %d rather than %x on purpose: %x
-      # follows LC_TIME, which core.nix sets to en_GB for Monday-first weeks and
-      # would render this as 10/09/26.
+      # screen: time, then the date, then custom/meetings — one cluster, read
+      # left to right, all three opening the same window on click.
+      #
+      # Date spelled out as %Y/%m/%d rather than %x on purpose: %x follows
+      # LC_TIME, which core.nix now sets to en_GB for Monday-first weeks, and
+      # would render this as 10/09/26 — little-endian and ambiguous next to a
+      # 24h time. Big-endian sorts, and never has to be guessed at.
       clock = {
-        format = "{:%Y %m %d  %H:%M}";
+        format = "{:%H:%M  %Y/%m/%d}";
         # Opens the week view (modules/home/calendar.nix). Store path rather
         # than a bare `gnome-calendar`: waybar runs as a systemd user unit here,
         # so a PATH miss would fail silently on click with nothing in the log
@@ -328,6 +455,21 @@ in
         };
       };
 
+      # Today's remaining meetings, next to the date it belongs with.
+      "custom/meetings" = {
+        exec = lib.getExe meetingsScript;
+        return-type = "json";
+        # 60s, not the 5s custom/perf uses: the count answers "what's left
+        # today", which changes when a meeting ENDS, not when the feed does
+        # (vdirsyncer only pulls every 30 min anyway). One khal run measures
+        # ~0.25s, dominated by Python start-up, so a minute tick is free and
+        # keeps this in step with the clock it sits beside.
+        interval = 60;
+        # Same target as the clock, so clicking anywhere in the left cluster
+        # gets you the week view rather than making you aim.
+        on-click = lib.getExe pkgs.gnome-calendar;
+      };
+
       # CPU + RAM at a glance, top processes on hover, btop on click.
       "custom/perf" = {
         exec = lib.getExe perfScript;
@@ -336,6 +478,40 @@ in
         return-type = "json";
         interval = 5;
         on-click = "ghostty -e btop";
+      };
+
+      # Notification indicator + entry point to swaync's control centre
+      # (modules/home/notifications.nix). Sits at the right edge of the LEFT
+      # group so it is adjacent to the panel, which opens on the left.
+      #
+      # `swaync-client -swb` is a long-running subscription, not a polled
+      # command: it prints a fresh JSON line on every notification add/close.
+      # So there is deliberately no `interval` — adding one would make waybar
+      # re-exec it on a timer and lose the subscription. Store path rather than
+      # a bare name because waybar runs as a systemd user unit, where a PATH
+      # miss fails silently.
+      "custom/notification" = {
+        exec = "${lib.getExe' pkgs.swaynotificationcenter "swaync-client"} -swb";
+        return-type = "json";
+        # swaync emits its own class per state; these are the glyphs for them.
+        # The dot variants mark "unread" so a glance distinguishes an empty
+        # tray from a waiting one without reading a count.
+        format = "{icon}";
+        format-icons = {
+          notification = "󰂚<span foreground='#8ba4b0'><sup>󰺕</sup></span>";
+          none = "󰂜";
+          dnd-notification = "󰂛<span foreground='#8ba4b0'><sup>󰺕</sup></span>";
+          dnd-none = "󰂛";
+          inhibited-notification = "󰂚<span foreground='#8ba4b0'><sup>󰺕</sup></span>";
+          inhibited-none = "󰂜";
+          dnd-inhibited-notification = "󰂛<span foreground='#8ba4b0'><sup>󰺕</sup></span>";
+          dnd-inhibited-none = "󰂛";
+        };
+        # The glyphs above are pango markup, so waybar must not escape them.
+        escape = false;
+        tooltip = true;
+        on-click = "${lib.getExe' pkgs.swaynotificationcenter "swaync-client"} -t -sw";
+        on-click-right = "${lib.getExe' pkgs.swaynotificationcenter "swaync-client"} -d -sw";
       };
 
       "custom/power" = {
@@ -404,13 +580,43 @@ in
          those, they'd just be redundant lines to keep in sync. */
       #tray,
       #custom-perf,
+      #custom-meetings,
+      #custom-notification,
       #custom-power {
         padding: 0 5px;
       }
 
-      /* Set by the class field in waybar-perf's JSON output. */
-      #custom-perf.warning { color: @base0A; }
-      #custom-perf.critical { color: @base08; }
+      /* Nothing left today is the normal state, so it recedes like #mpris does
+         rather than sitting there at full contrast. Amber for a feed that has
+         stopped updating, red only for "khal could not read this at all" —
+         both are cases where the number on the bar cannot be trusted, which is
+         the whole reason the script computes a class. */
+      #custom-meetings.none {
+        color: @base04;
+      }
+      #custom-meetings.stale {
+        color: @base0A;
+      }
+      #custom-meetings.error {
+        color: @base08;
+      }
+
+      /* Dimmed to match #mpris beside it, so an empty tray recedes. The
+         unread state is carried by the superscript dot in the glyph itself
+         (see custom/notification above), not by a colour change here — a
+         recolour would fight Stylix's own module colours. */
+      #custom-notification {
+        color: @base04;
+      }
+      #custom-notification:hover {
+        color: @base05;
+      }
+
+      /* No colour rules for #custom-perf.warning/.critical on purpose: the
+         module colours CPU and RAM separately via inline <span color>, and an
+         inline span beats a CSS rule, so anything here would be dead code that
+         looks live. The classes are still emitted if you ever want a background
+         or border keyed to the module's overall state. */
 
       #custom-power {
         color: @base08;

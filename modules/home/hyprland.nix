@@ -27,7 +27,6 @@
       # started by graphical-session.target. Launching it here too would give you
       # two bars.
       exec-once = [
-        "mako"
         "hypridle"
         # No nm-applet: it existed only for its tray icon, which duplicated
         # waybar's own `network` module (two network indicators side by side).
@@ -117,6 +116,10 @@
         # Plain `pkill waybar`, NOT `pkill -x`: waybar is a wrapped binary, so
         # its comm is `.waybar-wrapped` — an exact match finds nothing. Same
         # trap as fuzzel above; it happens to fit in comm's 15-char cap exactly.
+        # Notification centre (swaync). Same toggle semantics as the bar
+        # module's click; -sw so it works even if swaync is not up yet.
+        "$mod, N, exec, swaync-client -t -sw"
+
         "$mod, B, exec, pkill -SIGUSR1 waybar"
         "$mod SHIFT, B, exec, pkill -SIGUSR2 waybar"
 
@@ -170,7 +173,7 @@
 
   # Notifications, launcher, screen lock, idle daemon. The bar lives in
   # modules/home/waybar.nix.
-  services.mako.enable = true;
+  # Notification daemon lives in modules/home/notifications.nix (swaync).
   # Launcher. fuzzel over wofi: Wayland-native rather than GTK3, renders app
   # icons properly, and has a far richer Stylix target (11 color roles vs
   # wofi's 4) so it actually inherits the scheme instead of looking unstyled.

@@ -12,6 +12,7 @@
     ./media.nix
     ./comms.nix
     ./git.nix
+    ./security.nix
     ./dev.nix
     ./hyprland.nix
   ];

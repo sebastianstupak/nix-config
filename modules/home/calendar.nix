@@ -65,8 +65,22 @@
   ...
 }:
 let
-  cals = config.my.calendars;
-  enabled = cals != { };
+  groups = config.my.calendars;
+
+  # One entry per feed, with its group's identity folded in and `meetings`
+  # resolved (feed overrides group). Exposed as my.calendarFeeds so the bar
+  # module reads the same resolution rather than reimplementing it.
+  feeds = lib.concatMapAttrs (
+    groupName: group:
+    lib.mapAttrs (_: feed: {
+      group = groupName;
+      inherit (group) icon order;
+      inherit (feed) label urlFile;
+      meetings = if feed.meetings == null then group.meetings else feed.meetings;
+    }) group.feeds
+  ) groups;
+
+  enabled = feeds != { };
 
   basePath = "${config.xdg.dataHome}/calendars";
 
@@ -85,48 +99,139 @@ in
     default = { };
     example = lib.literalExpression ''
       {
-        work.meetings = true; # Outlook published feed
-        personal.meetings = true; # Proton share link
-        holidays = { }; # mirrored and visible, but never counted
+        work = {
+          icon = "󰃖";
+          order = 10;
+          feeds = {
+            outlook.urlFile = "/run/secrets/calendar-work-url";
+            outlook-team = {
+              label = "Team";
+              urlFile = "/run/secrets/calendar-work-team-url";
+            };
+            outlook-oncall = {
+              meetings = false; # mirrored, but not a thing you attend
+              urlFile = "/run/secrets/calendar-work-oncall-url";
+            };
+          };
+        };
+        holidays = {
+          meetings = false; # visible in the week view, never counted
+          feeds.proton-holidays.urlFile = "/run/secrets/calendar-holidays-url";
+        };
       }
     '';
     description = ''
-      Published ICS calendar feeds to mirror locally, keyed by the short name
-      that khal, vdirsyncer and the local directory all use. Provider-agnostic:
-      a Proton share link and an Outlook published-calendar link are both just
-      URLs. Each entry needs its own link — see the header of
-      modules/home/calendar.nix for where to get one per provider.
+      Published ICS calendar feeds to mirror locally, grouped by what they are
+      *for*. One group is one bar counter with one icon: all the work feeds sum
+      into a work number, all the personal ones into a personal number.
+
+      Provider-agnostic — a Proton share link and an Outlook published-calendar
+      link are both just URLs — so prefix the feed names with their origin
+      (`outlook-team`, `proton-family`) rather than encoding it in the schema.
+      Feed names are the vdir directory and the khal calendar name, so they must
+      be unique across groups; an assertion enforces that.
     '';
     type = lib.types.attrsOf (
-      lib.types.submodule (
-        { name, ... }:
-        {
-          options = {
-            meetings = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = ''
-                Count this calendar in the waybar "meetings left today" module.
-                Off by default, because the useful default for a birthday,
-                holiday or subscribed-sports-fixtures feed is to be visible in
-                the week view without ever inflating the counter.
-              '';
-            };
-
-            urlFile = lib.mkOption {
-              type = lib.types.str;
-              default = "${config.xdg.configHome}/vdirsyncer/${name}-url";
-              defaultText = lib.literalExpression ''"''${config.xdg.configHome}/vdirsyncer/‹name›-url"'';
-              description = ''
-                Path to a file containing nothing but this calendar's feed URL.
-                Read at sync time via vdirsyncer's `url.fetch`, so the link
-                never enters the Nix store or git.
-              '';
-            };
+      lib.types.submodule {
+        options = {
+          icon = lib.mkOption {
+            type = lib.types.str;
+            default = "󰃭";
+            description = ''
+              Glyph for this group's bar counter. Nerd Font (JetBrainsMono NF is
+              the bar font — check coverage with `fc-list ':charset=f00d6'`
+              before picking something exotic, or it renders as tofu). Give each
+              group a distinct one: telling two counters apart is the entire
+              point of splitting them.
+            '';
           };
-        }
-      )
+
+          order = lib.mkOption {
+            type = lib.types.int;
+            default = 50;
+            description = ''
+              Bar position among the counters, ascending. Ties break
+              alphabetically. Exists because attribute sets are unordered, so
+              without it "personal" would always sit left of "work".
+            '';
+          };
+
+          meetings = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = ''
+              Whether this group gets a bar counter at all, and the default for
+              every feed in it. Setting it false on a group of birthdays,
+              holidays or sports fixtures mirrors them for the week view without
+              ever putting a number on the bar.
+            '';
+          };
+
+          feeds = lib.mkOption {
+            default = { };
+            description = ''
+              The feeds in this group, keyed by a name that is unique across ALL
+              groups — it names the directory under
+              ~/.local/share/calendars and the khal calendar.
+            '';
+            type = lib.types.attrsOf (
+              lib.types.submodule (
+                { name, ... }:
+                {
+                  options = {
+                    urlFile = lib.mkOption {
+                      type = lib.types.str;
+                      default = "${config.xdg.configHome}/vdirsyncer/${name}-url";
+                      defaultText = lib.literalExpression ''"''${config.xdg.configHome}/vdirsyncer/‹name›-url"'';
+                      description = ''
+                        Path to a file containing nothing but this feed's URL.
+                        Read at sync time via vdirsyncer's `url.fetch`, so the
+                        link never enters the Nix store or git. Point it at a
+                        sops secret to get it out of $HOME as well.
+                      '';
+                    };
+
+                    label = lib.mkOption {
+                      type = lib.types.str;
+                      default = name;
+                      defaultText = lib.literalMD "the attribute name";
+                      description = ''
+                        Name shown against individual events in the bar tooltip,
+                        when its group has more than one feed. The attribute name
+                        has to be terse and filesystem-safe; this does not.
+                      '';
+                    };
+
+                    meetings = lib.mkOption {
+                      type = lib.types.nullOr lib.types.bool;
+                      default = null;
+                      defaultText = lib.literalMD "the group's `meetings`";
+                      description = ''
+                        Override the group's `meetings` for this one feed — e.g.
+                        an on-call rota that belongs with work but should not
+                        inflate the count of things to attend.
+                      '';
+                    };
+                  };
+                }
+              )
+            );
+          };
+        };
+      }
     );
+  };
+
+  # The resolved per-feed view, which is what everything downstream actually
+  # wants: one entry per feed, carrying the group it came from and whether it
+  # counts. Internal because it is derived, and shared so that the inheritance
+  # rule for `meetings` (feed overrides group) exists in exactly ONE place
+  # rather than once here and once in the bar module.
+  options.my.calendarFeeds = lib.mkOption {
+    type = lib.types.attrs;
+    internal = true;
+    default = feeds;
+    description = "Flattened `my.calendars`, keyed by feed name.";
   };
 
   # Read by the waybar counter for its staleness check. An option rather than
@@ -140,6 +245,23 @@ in
   };
 
   config = lib.mkIf enabled {
+    # The flatten above is keyed by feed name, so a name reused in two groups
+    # would silently lose one of them — and with it one vdir, one khal calendar
+    # and one pair. Names are filesystem paths and khal identifiers, so they have
+    # to be globally unique anyway; say so instead of debugging it later.
+    assertions =
+      let
+        declared = lib.concatMap (group: lib.attrNames group.feeds) (lib.attrValues groups);
+      in
+      [
+        {
+          assertion = lib.length declared == lib.length (lib.unique declared);
+          message =
+            "my.calendars: feed names must be unique across groups, but got "
+            + lib.concatStringsSep ", " (lib.sort (a: b: a < b) declared);
+        }
+      ];
+
     home.packages = [ pkgs.gnome-calendar ];
 
     accounts.calendar = {
@@ -160,7 +282,7 @@ in
           enable = true;
           type = "calendar";
         };
-      }) cals;
+      }) feeds;
     };
 
     programs.khal = {
@@ -191,22 +313,25 @@ in
     # over every storage section, and that strips a `.fetch` suffix off ANY key,
     # not just password (strategies: command, shell, prompt).
     #
-    # One pair per calendar. vdirsyncer syncs pairs independently and keeps
-    # per-pair status, so a calendar whose link has gone stale (or whose urlFile
-    # is missing) fails on its own and leaves the others alone — the service goes
-    # red, and the bar's staleness indicator follows the OLDEST counted calendar.
+    # One pair per FEED, flat — vdirsyncer has no notion of the groups; those
+    # exist only to bucket the bar counters. Pairs sync independently and keep
+    # per-pair status, so a feed whose link has gone stale (or whose urlFile is
+    # missing) fails on its own and leaves the others alone: the service goes red,
+    # and each counter's staleness follows the oldest feed IT counts.
     xdg.configFile."vdirsyncer/config".text = ''
+      # Generated from `my.calendars` — edit that, not this file.
+      # `collections = null` on every pair: a published ICS link is a single
+      # calendar, not a discoverable set of collections, so there is nothing to
+      # enumerate.
       [general]
       status_path = "${statusPath}"
     ''
     + lib.concatStrings (
-      lib.mapAttrsToList (name: cal: ''
+      lib.mapAttrsToList (name: feed: ''
 
         [pair ${name}]
         a = "${name}_local"
         b = "${name}_remote"
-        # A shared ICS link is a single calendar, not a discoverable set of
-        # collections, so there is nothing to enumerate.
         collections = null
 
         [storage ${name}_local]
@@ -216,8 +341,8 @@ in
 
         [storage ${name}_remote]
         type = "http"
-        url.fetch = ["command", "cat", "${cal.urlFile}"]
-      '') cals
+        url.fetch = ["command", "cat", "${feed.urlFile}"]
+      '') feeds
     );
 
     services.vdirsyncer = {
@@ -238,7 +363,7 @@ in
     # Creating the directories first turns discover into a silent no-op, so it is
     # safe to re-run ahead of every sync. Bare `discover` covers every pair.
     systemd.user.services.vdirsyncer.Service.ExecStartPre = [
-      "${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArgs (map vdirOf (lib.attrNames cals))}"
+      "${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArgs (map vdirOf (lib.attrNames feeds))}"
       "${config.services.vdirsyncer.package}/bin/vdirsyncer discover"
     ];
   };

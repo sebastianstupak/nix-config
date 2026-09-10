@@ -100,6 +100,15 @@ add `<name> = mkHost ./hosts/<name>;` under `nixosConfigurations` in `flake.nix`
 **Adding a user:** create `home/<name>/` and reference it from the host's
 `home-manager.users.<name>`.
 
+**Own options live under `my.*`.** When a module needs configuration that is
+*data about this person* rather than mechanism — the list of calendar feeds, say
+— it declares a typed `options.my.<thing>` and the value is set in
+`home/<user>/default.nix`. Two modules needing the same derived path (a bar
+script and the syncer that feeds it) share it through an `internal = true`
+option instead of repeating the string. Keep the namespace shallow and
+documented in the module that declares it; see `my.calendars` in
+`modules/home/calendar.nix`.
+
 ## Code style
 
 - Format with `nix fmt` (nixfmt-rfc-style) before every commit; `nix flake check`

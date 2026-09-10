@@ -323,129 +323,196 @@ let
     '';
   };
 
-  # Which calendars the counter counts, straight from `my.calendars` — the same
-  # attrset home/<user>/default.nix declares, so the bar and the syncer cannot
-  # disagree, and a name that khal does not know is impossible by construction
-  # (it would abort with a usage error: khal validates -a against its config).
-  meetingCalendars = lib.attrNames (lib.filterAttrs (_: c: c.meetings) config.my.calendars);
+  # One counter per calendar group, built from `my.calendars` +
+  # `my.calendarGroups` — the same attrsets home/<user>/default.nix declares, so
+  # the bar and the syncer cannot disagree, and a calendar name khal does not
+  # know is impossible by construction (khal validates -a against its own config
+  # and aborts with a usage error, which the module's error state would surface).
+  meetingGroups =
+    let
+      # my.calendarFeeds is the resolved flat view calendar.nix exports: one
+      # entry per feed, carrying its group's icon/order and whether it counts.
+      # Reading that rather than re-walking my.calendars keeps the
+      # feed-overrides-group rule for `meetings` in one place.
+      counted = lib.filterAttrs (_: f: f.meetings) config.my.calendarFeeds;
+      inGroup = g: lib.filterAttrs (_: f: f.group == g) counted;
+    in
+    lib.sort (a: b: if a.order == b.order then a.group < b.group else a.order < b.order) (
+      map (
+        g:
+        let
+          members = inGroup g;
+        in
+        {
+          group = g;
+          # Every feed in a group carries the same icon/order, so any member does.
+          inherit (lib.head (lib.attrValues members)) icon order;
+          calendars = lib.attrNames members;
+          labels = lib.mapAttrs (_: f: f.label) members;
+        }
+      ) (lib.unique (lib.mapAttrsToList (_: f: f.group) counted))
+    );
 
-  # Feeds custom/meetings: how many of today's meetings are still ahead, across
-  # every calendar flagged `meetings = true` — work (Outlook) and personal
-  # (Proton) land in the same number. modules/home/calendar.nix owns how they get
-  # here.
+  # Feeds one custom/meetings-<group> module: how many of that group's meetings
+  # are still ahead today. modules/home/calendar.nix owns how the feeds get here.
   #
   # khal rather than reading the .ics files here: a vdir holds raw VEVENTs, so
   # anything hand-rolled would have to expand RRULEs and resolve VTIMEZONEs
   # itself — a daily standup would either vanish or show up once, in 2019. khal
   # does both already, and `--json` (0.14+) hands back fields instead of the
-  # human table that older waybar recipes scrape with awk.
-  meetingsScript = pkgs.writeShellApplication {
-    name = "waybar-meetings";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.khal
-      pkgs.jq
-    ];
-    text = ''
-      # One status file per calendar. Freshness comes from the OLDEST of them,
-      # because a count merged from several feeds is only as trustworthy as its
-      # worst source — and each pair fails independently: an Outlook link that
-      # the tenant rotated stops updating while Proton carries on, which without
-      # this would look like a quiet Thursday.
-      #
-      # A frozen count is worse than no count, and vdirsyncer rewrites these on
-      # every successful sync including no-op ones, so mtime is the real
-      # "last synced".
-      status_files=(${
-        lib.escapeShellArgs (map (n: "${config.my.calendarStatusPath}/${n}.items") meetingCalendars)
-      })
+  # human table that older waybar recipes scrape with awk. It also drops
+  # STATUS:CANCELLED events on its own, which matters for Outlook feeds: they
+  # keep carrying cancelled meetings, and none of them reach the count.
+  meetingsScriptFor =
+    grp:
+    pkgs.writeShellApplication {
+      name = "waybar-meetings-${grp.group}";
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.khal
+        pkgs.jq
+      ];
+      text = ''
+        calendars=(${lib.escapeShellArgs grp.calendars})
+        status_dir=${lib.escapeShellArg config.my.calendarStatusPath}
 
-      oldest=""
-      for f in "''${status_files[@]}"; do
-        if [ ! -f "$f" ]; then
-          oldest=""
-          break
-        fi
-        m=$(stat -c %Y "$f")
-        if [ -z "$oldest" ] || [ "$m" -lt "$oldest" ]; then
-          oldest=$m
-        fi
-      done
+        # Freshness comes from the OLDEST calendar in the group, and names it: a
+        # count merged from several feeds is only as trustworthy as its worst
+        # source, and each pair fails independently — an Outlook link the tenant
+        # rotated stops updating while Proton carries on, which without this
+        # would look like a quiet Thursday. With several feeds behind one
+        # counter, "20h behind" is not actionable unless it says WHICH one.
+        #
+        # vdirsyncer rewrites these on every successful sync including no-op
+        # ones, so mtime is the real "last synced".
+        oldest=""
+        oldest_cal=""
+        for c in "''${calendars[@]}"; do
+          f="$status_dir/$c.items"
+          if [ ! -f "$f" ]; then
+            oldest=""
+            oldest_cal="$c"
+            break
+          fi
+          m=$(stat -c %Y "$f")
+          if [ -z "$oldest" ] || [ "$m" -lt "$oldest" ]; then
+            oldest=$m
+            oldest_cal="$c"
+          fi
+        done
 
-      stale=no
-      if [ -n "$oldest" ]; then
-        mins=$(( ( $(date +%s) - oldest ) / 60 ))
-        # Switch to hours past a couple of them, because the number people
-        # actually read this tooltip for is "is 1200 minutes bad?".
-        if [ "$mins" -ge 120 ]; then
-          synced="$(( mins / 60 ))h ago"
+        stale=no
+        if [ -n "$oldest" ]; then
+          mins=$(( ( $(date +%s) - oldest ) / 60 ))
+          # Switch to hours past a couple of them, because the number people
+          # actually read this tooltip for is "is 1200 minutes bad?".
+          if [ "$mins" -ge 120 ]; then
+            synced="$(( mins / 60 ))h ago"
+          else
+            synced="$mins min ago"
+          fi
+          [ "$mins" -gt 720 ] && stale=yes
         else
-          synced="$mins min ago"
+          synced="never"
+          stale=yes
         fi
-        [ "$mins" -gt 720 ] && stale=yes
-      else
-        synced="never"
-        stale=yes
-      fi
 
-      # -a restricts the query to the counted calendars; without it khal would
-      # merge in every mirrored feed, birthdays and holidays included. `today 1d`
-      # means today ONLY — the range argument is a length, not an end date.
-      # Asking for fields rather than a format string so the filter below can
-      # read them; khal accepts --json repeatedly.
-      if ! events=$(khal list ${
-        lib.escapeShellArgs (
-          lib.concatMap (n: [
-            "-a"
-            n
-          ]) meetingCalendars
-        )
-      } \
-                              --json title --json calendar --json start-time \
-                              --json end-time --json end today 1d 2>&1); then
-        jq -cn --arg err "$events" \
-          '{text: "󰃭 ?", tooltip: ("khal could not read the calendars:\n" + $err),
-            class: "error"}'
-        exit 0
-      fi
+        # -a restricts the query to THIS group's calendars; without it khal would
+        # merge in every mirrored feed — the other group's, plus birthdays and
+        # holidays. `today 1d` means today ONLY: the range argument is a length,
+        # not an end date. Fields rather than a format string so the filter below
+        # can read them; khal accepts --json repeatedly.
+        args=()
+        for c in "''${calendars[@]}"; do args+=(-a "$c"); done
 
-      # Filtering on `end`, not `start`: a meeting you are sitting in is still
-      # one of today's meetings, and --notstarted is no help — it filters against
-      # the START of the range (00:00 today), so it keeps everything. `end`
-      # carries the date as well as the time, which also gets the 23:45 event
-      # ending at 00:00 right; comparing bare clock times would drop it.
-      #
-      # All-day entries are excluded by the empty start-time: they are not
-      # meetings, and counting them would put a permanent +1 on the bar.
-      #
-      # sort_by(.end): khal returns events grouped per calendar, so a merged
-      # work+personal list would otherwise read 09:00, 14:00, 10:00 — useless as
-      # a "what's next" list, which is the whole point of the hover.
-      jq -cn --argjson evs "$events" --arg now "$(date '+%Y-%m-%d %H:%M')" \
-             --arg synced "$synced" --arg stale "$stale" \
-             --argjson showcal ${if lib.length meetingCalendars > 1 then "true" else "false"} '
-        def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
-        [ $evs[] | select(."start-time" != "" and .end > $now) ] as $all
-        | ($all | sort_by(.end)) as $left
-        | ($left | length) as $n
-        | {
-            text: "󰃭 \($n)",
-            tooltip: (
-              (if $n == 0 then "<b>Nothing left today</b>"
-               else "<b>\($n) left today</b>\n"
-                    + ([ $left[]
-                         | "  \(."start-time")–\(."end-time")  \(.title | esc)"
-                           + (if $showcal then "  <i>\(.calendar | esc)</i>" else "" end) ]
-                       | join("\n"))
-               end)
-              + "\n<i>Synced \($synced)"
-              + (if $stale == "yes" then " — check systemctl --user status vdirsyncer" else "" end)
-              + "</i>"
-            ),
-            class: (if $stale == "yes" then "stale" elif $n == 0 then "none" else "ok" end),
-          }'
-    '';
-  };
+        if ! events=$(khal list "''${args[@]}" \
+          --json title --json calendar --json start-time \
+          --json end-time --json end today 1d 2>&1); then
+          jq -cn --arg icon ${lib.escapeShellArg grp.icon} --arg err "$events" \
+            '{text: "\($icon) ?", tooltip: ("khal could not read the calendars:\n" + $err),
+              class: "error"}'
+          exit 0
+        fi
+
+        # Filtering on `end`, not `start`: a meeting you are sitting in is still
+        # one of today's meetings, and --notstarted is no help — it filters
+        # against the START of the range (00:00 today), so it keeps everything.
+        # `end` carries the date as well as the time, which also gets the 23:45
+        # event ending at 00:00 right; comparing bare clock times would drop it.
+        #
+        # All-day entries are excluded by the empty start-time: they are not
+        # meetings, and counting them would put a permanent +1 on the bar.
+        #
+        # group_by over (start, end, title) DEDUPES one meeting arriving on two
+        # feeds in the same group — invited on your mailbox calendar AND sitting
+        # on the shared team calendar is one thing to attend, not two. It cannot
+        # key on UID: vdirsyncer's http storage REWRITES every UID to a content
+        # hash on the way into the vdir (verified — an Outlook
+        # UID:040000008200E000... arrives as UID:1cb18063...), and two feeds
+        # carry different bytes for the same meeting, so their hashes differ.
+        # The cost is that two genuinely different meetings sharing a title AND
+        # a time slot collapse to one, which for a count of things you can
+        # attend is the right answer anyway.
+        #
+        # sort_by(.end) afterwards: khal returns events grouped per calendar, so
+        # a merged list would otherwise read 09:00, 14:00, 10:00 — useless as a
+        # "what's next" list, which is the whole point of the hover.
+        jq -cn --argjson evs "$events" --arg now "$(date '+%Y-%m-%d %H:%M')" \
+          --arg synced "$synced" --arg stalecal "$oldest_cal" --arg stale "$stale" \
+          --arg icon ${lib.escapeShellArg grp.icon} \
+          --arg group ${lib.escapeShellArg grp.group} \
+          --argjson labels ${lib.escapeShellArg (builtins.toJSON grp.labels)} \
+          --argjson showcal ${if lib.length grp.calendars > 1 then "true" else "false"} '
+          def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+          [ $evs[] | select(."start-time" != "" and .end > $now) ]
+          | group_by([ .["start-time"], .end, .title ])
+          | map(.[0])
+          | sort_by(.end) as $left
+          | ($left | length) as $n
+          | {
+              text: "\($icon) \($n)",
+              tooltip: (
+                "<b>\($group) — "
+                + (if $n == 0 then "nothing left today" else "\($n) left today" end)
+                + "</b>"
+                + (if $n == 0 then ""
+                   else "\n"
+                        + ([ $left[]
+                             | "  \(."start-time")–\(."end-time")  \(.title | esc)"
+                               + (if $showcal
+                                  then "  <i>\(($labels[.calendar] // .calendar) | esc)</i>"
+                                  else "" end) ]
+                           | join("\n"))
+                   end)
+                + (if $stale == "yes"
+                   then "\n<i>\($stalecal) synced \($synced) — check systemctl --user status vdirsyncer</i>"
+                   else "\n<i>Synced \($synced)</i>" end)
+              ),
+              class: (if $stale == "yes" then "stale" elif $n == 0 then "none" else "ok" end),
+            }'
+      '';
+    };
+
+  # `#custom-meetings-work, #custom-meetings-personal` and so on: waybar names a
+  # custom module's node after the module, so per-group counters mean per-group
+  # selectors, which means the rules have to be generated alongside them.
+  meetingSelectors =
+    suffix: lib.concatMapStringsSep ",\n" (grp: "#custom-meetings-${grp.group}${suffix}") meetingGroups;
+
+  meetingCss = lib.optionalString (meetingGroups != [ ]) ''
+    ${meetingSelectors ""} {
+      padding: 0 5px;
+    }
+    ${meetingSelectors ".none"} {
+      color: @base04;
+    }
+    ${meetingSelectors ".stale"} {
+      color: @base0A;
+    }
+    ${meetingSelectors ".error"} {
+      color: @base08;
+    }
+  '';
 in
 {
   programs.waybar = {
@@ -482,11 +549,12 @@ in
       modules-left = [
         "custom/clock"
       ]
-      # Dropped entirely when no calendar is flagged `meetings = true`, rather
-      # than rendered as a permanent "󰃭 0": with no -a arguments khal would
-      # happily count every mirrored feed instead of none, so an empty list has
-      # to mean "no counter", not "count everything".
-      ++ lib.optional (meetingCalendars != [ ]) "custom/meetings"
+      # One counter per calendar group, in `my.calendarGroups.<g>.order`. A group
+      # with nothing flagged `meetings = true` produces no module at all, rather
+      # than a permanent "󰃭 0" — with no -a arguments khal would happily count
+      # every mirrored feed instead of none, so "no counted calendars" has to
+      # mean "no counter", not "count everything".
+      ++ map (grp: "custom/meetings-${grp.group}") meetingGroups
       ++ [
         "custom/notification"
         "mpris"
@@ -811,21 +879,6 @@ in
         on-click = lib.getExe pkgs.gnome-calendar;
       };
 
-      # Today's remaining meetings, next to the date it belongs with.
-      "custom/meetings" = {
-        exec = lib.getExe meetingsScript;
-        return-type = "json";
-        # 60s, not the 5s custom/perf uses: the count answers "what's left
-        # today", which changes when a meeting ENDS, not when the feed does
-        # (vdirsyncer only pulls every 30 min anyway). One khal run measures
-        # ~0.25s, dominated by Python start-up, so a minute tick is free and
-        # keeps this in step with the clock it sits beside.
-        interval = 60;
-        # Same target as the clock, so clicking anywhere in the left cluster
-        # gets you the week view rather than making you aim.
-        on-click = lib.getExe pkgs.gnome-calendar;
-      };
-
       # CPU + RAM at a glance, top processes on hover, btop on click.
       "custom/perf" = {
         exec = lib.getExe perfScript;
@@ -880,7 +933,28 @@ in
         icon-size = 16;
         spacing = 10;
       };
-    };
+    }
+    # One counter per calendar group, generated so that adding a feed to
+    # `my.calendars` is the only edit needed — a new group appears on the bar on
+    # its own, and a group that loses its last counted calendar disappears.
+    // lib.listToAttrs (
+      map (
+        grp:
+        lib.nameValuePair "custom/meetings-${grp.group}" {
+          exec = lib.getExe (meetingsScriptFor grp);
+          return-type = "json";
+          # 60s, not the 5s custom/perf uses: the count answers "what's left
+          # today", which changes when a meeting ENDS, not when the feed does
+          # (vdirsyncer only pulls every 30 min anyway). One khal run measures
+          # ~0.25s, dominated by Python start-up, so a minute tick is free and
+          # keeps these in step with the clock they sit beside.
+          interval = 60;
+          # Same target as the clock, so clicking anywhere in the left cluster
+          # gets you the week view rather than making you aim.
+          on-click = lib.getExe pkgs.gnome-calendar;
+        }
+      ) meetingGroups
+    );
 
     # Stylix owns the base styling (background, font, tooltip colors, and the
     # #workspaces focused/urgent underline) and declares `style` as a
@@ -967,7 +1041,6 @@ in
       #tray,
       #custom-perf,
       #custom-clock,
-      #custom-meetings,
       #custom-notification,
       #custom-vpn,
       #privacy,
@@ -1011,20 +1084,15 @@ in
         color: @base0B;
       }
 
-      /* Nothing left today is the normal state, so it recedes like #mpris does
+      /* Per-group counters, so these selectors are generated: one counter per
+         `my.calendarGroups` entry that has counted calendars in it.
+
+         Nothing left today is the normal state, so it recedes like #mpris does
          rather than sitting there at full contrast. Amber for a feed that has
          stopped updating, red only for "khal could not read this at all" —
          both are cases where the number on the bar cannot be trusted, which is
          the whole reason the script computes a class. */
-      #custom-meetings.none {
-        color: @base04;
-      }
-      #custom-meetings.stale {
-        color: @base0A;
-      }
-      #custom-meetings.error {
-        color: @base08;
-      }
+      ${meetingCss}
 
       /* Dimmed to match #mpris beside it, so an empty tray recedes. The
          unread state is carried by the superscript dot in the glyph itself

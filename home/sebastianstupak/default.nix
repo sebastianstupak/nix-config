@@ -31,16 +31,53 @@
   # that no rebuild can reproduce, so a reinstall silently loses both feeds and
   # the bar's meeting counter goes quiet. Encrypted in git, they survive it.
   # A new calendar needs a matching secret in hosts/workstation/default.nix.
+  # One group per bar counter, each holding as many feeds as it needs. Feed names
+  # are prefixed with where they come from, because that is the thing you need to
+  # know when one of them stops updating — and the name is what shows up in
+  # `systemctl --user status vdirsyncer`, in ~/.local/share/calendars/, and in
+  # the hover when a group has more than one feed.
+  #
+  # Adding a feed: a key in secrets/calendars.yaml, a matching `sops.secrets`
+  # entry in hosts/workstation/default.nix, and a line here. Distinct icons are
+  # the point of splitting the counts — two 󰃭 chips would be a puzzle — and both
+  # of these are covered by JetBrainsMono NF (`fc-list ':charset=f00d6'`).
   my.calendars = {
     work = {
-      meetings = true; # Outlook/Teams, via Publish a calendar
-      urlFile = osConfig.sops.secrets.calendar-work-url.path;
+      icon = "󰃖"; # briefcase
+      order = 10;
+      feeds = {
+        # Outlook/Teams, via Calendar settings ▸ Shared calendars ▸ Publish.
+        outlook.urlFile = osConfig.sops.secrets.calendar-work-url.path;
+        # outlook-team = {
+        #   label = "Team";
+        #   urlFile = osConfig.sops.secrets.calendar-work-team-url.path;
+        # };
+        # outlook-oncall = {
+        #   meetings = false; # mirrored, but not something you attend
+        #   urlFile = osConfig.sops.secrets.calendar-work-oncall-url.path;
+        # };
+      };
     };
+
     personal = {
-      meetings = true; # Proton, via Share with anyone
-      urlFile = osConfig.sops.secrets.calendar-personal-url.path;
+      icon = "󰋜"; # house
+      order = 20;
+      feeds = {
+        # Proton, via Calendar ▸ Settings ▸ Share ▸ Share with anyone.
+        proton.urlFile = osConfig.sops.secrets.calendar-personal-url.path;
+        # proton-family = {
+        #   label = "Family";
+        #   urlFile = osConfig.sops.secrets.calendar-family-url.path;
+        # };
+      };
     };
-    # holidays = { };
+
+    # A group with meetings = false is mirrored for the week view and never gets
+    # a counter — birthdays, public holidays, a fixtures feed.
+    # holidays = {
+    #   meetings = false;
+    #   feeds.proton-holidays.urlFile = osConfig.sops.secrets.calendar-holidays-url.path;
+    # };
   };
 
   # Per-user git identity (shared git config lives in modules/home/git.nix).

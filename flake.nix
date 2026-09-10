@@ -88,8 +88,22 @@
       # `nix fmt` — format the whole tree with nixfmt-rfc-style.
       formatter.${system} = treefmtEval.config.build.wrapper;
 
-      # `nix flake check` runs this (verifies everything is formatted).
-      checks.${system}.formatting = treefmtEval.config.build.check self;
+      # `nix flake check` runs these.
+      checks.${system} = {
+        # verifies everything is formatted
+        formatting = treefmtEval.config.build.check self;
+
+        # Validate the Hyprland config home-manager generates actually parses as
+        # Lua (this Hyprland build uses a Lua config). Catches the serializer
+        # gotchas — hyphenated keys like `exec-once` and `$`-prefixed variable
+        # keys both produce invalid Lua — before they ever reach the machine.
+        hyprland-lua = pkgs.runCommand "hyprland-lua-check" { nativeBuildInputs = [ pkgs.lua5_4 ]; } ''
+          luac -p ${
+            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.lua".source
+          }
+          touch $out
+        '';
+      };
 
       # `nix develop` (or `direnv allow` via .envrc) — dev tooling for this repo:
       # the Nix linters/formatter, lefthook, and the secrets CLIs. The shellHook

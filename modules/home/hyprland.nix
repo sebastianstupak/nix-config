@@ -16,15 +16,9 @@
       # we do NOT declare $mod/$terminal/$menu — values are inlined below instead.
       monitor = ",preferred,auto,1";
 
-      exec-once = [
-        "waybar"
-        "mako"
-        "hypridle"
-        "nm-applet --indicator"
-        "blueman-applet"
-        "wl-paste --watch cliphist store" # clipboard history daemon
-        "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"
-      ];
+      # NOTE: `exec-once` is intentionally NOT here. The Lua serializer renders a
+      # hyphenated key as `hl.exec-once(...)`, which Lua parses as subtraction and
+      # rejects. It's emitted as valid Lua bracket-indexing in extraConfig below.
 
       input = {
         kb_layout = "us,sk";
@@ -94,6 +88,17 @@
         ", XF86MonBrightnessDown, exec, brightnessctl set 5%-"
       ];
     };
+
+    # exec-once entries as valid Lua (bracket-indexing sidesteps the hyphen bug).
+    extraConfig = ''
+      hl["exec-once"]("waybar")
+      hl["exec-once"]("mako")
+      hl["exec-once"]("hypridle")
+      hl["exec-once"]("nm-applet --indicator")
+      hl["exec-once"]("blueman-applet")
+      hl["exec-once"]("wl-paste --watch cliphist store")
+      hl["exec-once"]("${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1")
+    '';
   };
 
   # Bar, notifications, launcher, screen lock, idle daemon.

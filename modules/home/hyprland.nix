@@ -28,7 +28,7 @@
 
       input = {
         kb_layout = "us,sk";
-        kb_options = "grp:win_space_toggle"; # Super+Space cycles US <-> SK
+        kb_options = "grp:alt_shift_toggle"; # Alt+Shift cycles US <-> SK (Windows-style)
         follow_mouse = 1;
         touchpad.natural_scroll = true;
       };

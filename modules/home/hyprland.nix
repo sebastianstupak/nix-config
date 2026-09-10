@@ -163,9 +163,11 @@
         # Match on more than the app name — `gvim` finds "GVim", but this also
         # lets "browser" find LibreWolf via its generic name/keywords.
         fields = "name,generic,keywords";
-        # Quoted so the trailing space survives; unquoted, the prompt collides
-        # with the placeholder text ("><placeholder>").
-        prompt = ''"> "'';
+        # Empty (quoted, so it is an explicit empty value rather than "unset",
+        # which would fall back to fuzzel's default "> "). Not `hide-prompt`:
+        # that removes the whole input line, taking the placeholder and the
+        # echo of what you type with it.
+        prompt = ''""'';
         placeholder = "Search";
         # Needed by non-dmenu modes that launch terminal apps.
         terminal = "ghostty -e";

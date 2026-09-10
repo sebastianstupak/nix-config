@@ -145,6 +145,88 @@ let
     '';
   };
 
+  # Feeds custom/clock. A script rather than waybar's built-in `clock`, which
+  # cannot label a world clock: with `timezones` set, its {tz_list} runs every
+  # zone through ONE shared format string and emits no zone name (see
+  # getTZtext() in waybar's clock.cpp). Bali and Singapore are both UTC+8, so
+  # that tooltip would render two identical rows and a third that repeats local
+  # time — and Singapore's %Z is the unhelpful "+08", not "SGT".
+  #
+  # What this gives up is real: the built-in module schedules its tick on the
+  # minute boundary, while a custom module's `interval` is phase-aligned to
+  # whenever waybar started. Hence interval = 10 below — the minute can flip up
+  # to 10s late instead of up to a minute late. The built-in calendar widget
+  # (scroll to change month) goes too; `cal` draws the same grid statically.
+  clockScript = pkgs.writeShellApplication {
+    name = "waybar-clock";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux # cal
+      pkgs.gnused
+      pkgs.jq
+    ];
+    text = ''
+      # label:zone. Bali has no zone of its own — Asia/Makassar IS Indonesia
+      # Central (WITA), which is Bali. Slovenia sits on the same offset as
+      # Europe/Bratislava, so its row always mirrors the local time; it is here
+      # to be read by name, not because it ever differs.
+      zones=(
+        "Bali:Asia/Makassar"
+        "Singapore:Asia/Singapore"
+        "Slovenia:Europe/Ljubljana"
+      )
+
+      # Offsets as minutes east of UTC, so the delta stays right for half-hour
+      # and 45-minute zones as well. None of the three need that today, but a
+      # wrong number here would look plausible rather than obviously broken.
+      off_min() {
+        local o=$1 sign=1
+        [ "''${o:0:1}" = "-" ] && sign=-1
+        echo $(( sign * (10#''${o:1:2} * 60 + 10#''${o:3:2}) ))
+      }
+      local_min=$(off_min "$(date +%z)")
+
+      # %a matters as much as the time: at +6h, Bali is already tomorrow for a
+      # good chunk of the local evening, and a bare 04:33 hides that.
+      lines=()
+      for entry in "''${zones[@]}"; do
+        label=''${entry%%:*}
+        read -r dow hhmm off <<< "$(TZ="''${entry#*:}" date '+%a %H:%M %z')"
+
+        delta=$(( $(off_min "$off") - local_min ))
+        if [ "$delta" -eq 0 ]; then
+          rel="±0"
+        else
+          sign=+
+          if [ "$delta" -lt 0 ]; then
+            sign=-
+            delta=$(( -delta ))
+          fi
+          rel="$sign$(( delta / 60 ))h"
+          [ $(( delta % 60 )) -ne 0 ] && rel="$rel$(( delta % 60 ))"
+        fi
+
+        lines+=( "$(printf '%-10s %s %s  %s' "$label" "$dow" "$hhmm" "$rel")" )
+      done
+
+      # -m forces Monday-first instead of trusting LC_TIME to reach a systemd
+      # user unit, so this grid cannot disagree with GNOME Calendar's week view.
+      # \b around the day number is what keeps the bolding off "2026" and off
+      # the 1 inside 10; the trailing all-blank lines cal pads with are dropped
+      # so the tooltip doesn't grow a gap.
+      today=$(date +%-d)
+      grid=$(cal -m | sed -E "s/\b$today\b/<b>$today<\/b>/; /^[[:space:]]*$/d")
+
+      # <tt> on both blocks: pango's default font is proportional, so the
+      # columns above would only line up by accident without it.
+      tooltip=$(printf '<b>%s</b>\n\n<tt>%s</tt>\n\n<tt>%s</tt>\n\n<i>Click for the week view</i>' \
+        "$(date '+%A, %Y-%m-%d')" "$grid" "$(printf '%s\n' "''${lines[@]}")")
+
+      jq -cn --arg t "$(date '+%H:%M %Z  %Y/%m/%d')" --arg tip "$tooltip" \
+        '{text: $t, tooltip: $tip}'
+    '';
+  };
+
   # Feeds custom/meetings: how many of today's meetings are still ahead. Reads
   # the local mirror of the Proton feed — modules/home/calendar.nix owns how it
   # gets there, and both paths below are derived from the same options it
@@ -173,7 +255,13 @@ let
       stale=no
       if [ -f "$status" ]; then
         mins=$(( ( $(date +%s) - $(stat -c %Y "$status") ) / 60 ))
-        synced="$mins min ago"
+        # Switch to hours past a couple of them, because the number people
+        # actually read this tooltip for is "is 1200 minutes bad?".
+        if [ "$mins" -ge 120 ]; then
+          synced="$(( mins / 60 ))h ago"
+        else
+          synced="$mins min ago"
+        fi
         [ "$mins" -gt 720 ] && stale=yes
       else
         synced="never"
@@ -254,7 +342,7 @@ in
       # Duplicating it here just meant reading the same "claude"/cwd string in two
       # places, and a centred title fights the workspaces for the same space.
       modules-left = [
-        "clock"
+        "custom/clock"
         "custom/meetings"
         "custom/notification"
         "mpris"
@@ -274,8 +362,32 @@ in
       ];
 
       "hyprland/workspaces" = {
-        format = "{name}";
+        # `{windows}` renders one glyph per window in the workspace, via the
+        # window-rewrite rules below. Everything rewrites to nothing except
+        # windows asking for attention, so a workspace shows its number alone
+        # until something there wants you — then it grows one bell per waiting
+        # window, which IS the count.
+        format = "{name}{windows}";
         on-click = "activate";
+
+        # How a terminal app ends up here: Claude Code (or any program) writes
+        # BEL, ghostty's default bell-features includes `title`, so it prefixes
+        # the window title with 🔔 and holds it until the window is focused.
+        # Verified on this machine — the title genuinely becomes
+        # "🔔 ✳ Improve waybar functionality".
+        #
+        # Matching on title rather than urgency is deliberate: Hyprland does
+        # emit `urgent` events (it also fires on bell, confirmed), but
+        # `hyprctl clients` exposes no urgent field at all in 0.55.4, so there
+        # is nothing to count per workspace — waybar's own urgent handling is
+        # a single boolean class on the button, not a tally.
+        window-rewrite = {
+          "title<.*🔔.*>" = "󰂚";
+        };
+        # Empty, not the "?" default: without this every ordinary window would
+        # add a glyph and the badge would just be a window count.
+        window-rewrite-default = "";
+        format-window-separator = "";
         # Always show 1-5 even when empty, so the bar doesn't reflow every time
         # a workspace empties out. 6-9 (bound in hyprland.nix) appear on demand.
         persistent-workspaces."*" = 5;
@@ -428,31 +540,25 @@ in
       };
 
       # First module in modules-left, so this is the top-left corner of the
-      # screen: time, then the date, then custom/meetings — one cluster, read
-      # left to right, all three opening the same window on click.
+      # screen: time, zone, date, then custom/meetings — one cluster, read left
+      # to right, both halves opening the same window on click.
       #
-      # Date spelled out as %Y/%m/%d rather than %x on purpose: %x follows
-      # LC_TIME, which core.nix now sets to en_GB for Monday-first weeks, and
-      # would render this as 10/09/26 — little-endian and ambiguous next to a
-      # 24h time. Big-endian sorts, and never has to be guessed at.
-      clock = {
-        format = "{:%H:%M  %Y/%m/%d}";
+      # Date is %Y/%m/%d rather than %x on purpose: %x follows LC_TIME, which
+      # core.nix now sets to en_GB for Monday-first weeks, and would render this
+      # as 10/09/26 — little-endian and ambiguous next to a 24h time.
+      # Big-endian sorts, and never has to be guessed at.
+      "custom/clock" = {
+        exec = lib.getExe clockScript;
+        return-type = "json";
+        # 10s, not 60: see the note on clockScript — a custom module cannot
+        # align its tick to the minute, so this bounds how late the minute can
+        # flip. The script is a handful of `date` calls and one `cal`.
+        interval = 10;
         # Opens the week view (modules/home/calendar.nix). Store path rather
         # than a bare `gnome-calendar`: waybar runs as a systemd user unit here,
         # so a PATH miss would fail silently on click with nothing in the log
         # worth reading.
-        #
-        # This is also why there is no `format-alt` any more — waybar wires
-        # format-alt toggling to on-click, so the two can't coexist, and with
-        # the date permanently on the bar the alt format had nothing left to
-        # reveal.
         on-click = lib.getExe pkgs.gnome-calendar;
-        tooltip-format = "<tt><small>{calendar}</small></tt>";
-        calendar = {
-          mode = "month";
-          weeks-pos = "right";
-          format.today = "<b><u>{}</u></b>";
-        };
       };
 
       # Today's remaining meetings, next to the date it belongs with.
@@ -567,6 +673,24 @@ in
       #workspaces button.empty {
         color: @base03;
       }
+      /* A workspace with something waiting. The badge glyph from window-rewrite
+         carries the count; this just makes it findable from the corner of the
+         eye.
+
+         Selector deliberately mirrors Stylix's own `.modules-center #workspaces
+         button.urgent` rather than the shorter `#workspaces button.urgent`:
+         Stylix's is more specific, so the short form loses even though this
+         block is mkAfter — specificity beats source order.
+
+         Stylix fills the whole button with base08 (red) and inverts the text.
+         That reads as "something is broken" for what is only a terminal bell,
+         and at three lit workspaces the bar became a red slab. Amber underline
+         instead, matching the .active underline's shape. */
+      .modules-center #workspaces button.urgent {
+        background-color: transparent;
+        border-bottom: 3px solid @base0A;
+        color: @base0A;
+      }
 
       /* Dim now-playing so it recedes behind the clock and the status cluster. */
       #mpris {
@@ -577,9 +701,13 @@ in
       /* Remaining modules Stylix has no padding rule for (#mpris gets its own
          above). It DOES already cover #idle_inhibitor, #language, #bluetooth,
          #clock, #backlight, #network, #battery and #wireplumber — don't re-add
-         those, they'd just be redundant lines to keep in sync. */
+         those, they'd just be redundant lines to keep in sync.
+
+         #custom-clock is here rather than free: Stylix's rule is on #clock, and
+         swapping the built-in module for a custom one renamed the selector. */
       #tray,
       #custom-perf,
+      #custom-clock,
       #custom-meetings,
       #custom-notification,
       #custom-power {

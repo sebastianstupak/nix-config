@@ -9,6 +9,7 @@
     fd # fast find
     jq # JSON
     yq-go # YAML/JSON/XML
+    pandoc # document converter (PDF output needs a LaTeX engine, e.g. texliveSmall)
     tree
     btop # system monitor
     dust # disk usage

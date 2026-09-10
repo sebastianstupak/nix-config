@@ -45,15 +45,23 @@
     # Icon theme. Needed for app icons in the launcher (fuzzel reads
     # `icon-theme`, which Stylix only sets when this block is enabled — with it
     # off, icon lookup falls back to bare hicolor and renders almost nothing).
-    # Adwaita over Papirus deliberately: Adwaita is 13 MiB and already in the
-    # closure via nautilus, whereas papirus-icon-theme drags in ~1 GiB because
-    # it symlinks breeze-icons.
+    #
+    # Kanagawa rather than Adwaita for coverage: measured against the 39 distinct
+    # icon names our installed .desktop files request, Adwaita resolves 2 and
+    # Kanagawa 26 (the remainder come from apps shipping into hicolor). Adwaita
+    # is a system-icon set — it has exactly one application icon. 64 MiB closure.
+    # Not Papirus (~1 GiB, symlinks breeze-icons) or BeautyLine (~1.2 GiB).
     icons = {
       enable = true;
-      package = pkgs.adwaita-icon-theme;
-      dark = "Adwaita";
-      light = "Adwaita";
+      package = pkgs.kanagawa-icon-theme;
+      dark = "Kanagawa";
+      light = "Kanagawa";
     };
+
+    # Slight translucency on popups (launcher, notifications). Set here rather
+    # than as a raw alpha in the fuzzel colors, because Stylix owns the whole
+    # [colors] section and composes this into it.
+    opacity.popups = 0.95;
 
     fonts = {
       monospace = {

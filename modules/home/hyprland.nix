@@ -149,23 +149,39 @@
     enable = true;
     settings = {
       main = {
-        # Geometry: `width` is in characters, the pads in pixels. wofi's stylix
-        # target set none of this, which is why it rendered edge-to-edge.
-        width = 45;
-        lines = 12;
-        horizontal-pad = 24;
-        vertical-pad = 16;
-        inner-pad = 10;
-        line-height = 24;
+        # Compact geometry: `width` is in characters, the pads in pixels.
+        # Renders ~416x392 rather than fuzzel's roomier defaults (width 30 but
+        # 40px horizontal pad, 15 lines). wofi's stylix target set none of this,
+        # which is why it rendered edge-to-edge.
+        width = 32;
+        lines = 8;
+        horizontal-pad = 14;
+        vertical-pad = 10;
+        inner-pad = 8;
+        line-height = 20;
         icons-enabled = true;
-        # Needed by `--dmenu`-less modes that launch terminal apps.
+        # Match on more than the app name — `gvim` finds "GVim", but this also
+        # lets "browser" find LibreWolf via its generic name/keywords.
+        fields = "name,generic,keywords";
+        # Quoted so the trailing space survives; unquoted, the prompt collides
+        # with the placeholder text ("><placeholder>").
+        prompt = ''"> "'';
+        placeholder = "Search";
+        # Needed by non-dmenu modes that launch terminal apps.
         terminal = "ghostty -e";
         # Above fullscreen windows, so $mod+R works over a maximized app.
         layer = "overlay";
+        # Close when clicking another window. `exit-on-keyboard-focus-loss` is
+        # already yes by default, but it never fires under the default
+        # `keyboard-focus=exclusive`, which *locks* keyboard focus to fuzzel —
+        # so a click elsewhere never transfers focus and the launcher stays up.
+        # on-demand makes it focus like a normal window, so the exit triggers.
+        keyboard-focus = "on-demand";
+        exit-on-keyboard-focus-loss = true;
       };
       # Rounded to match decoration.rounding; layer surfaces don't inherit it.
       border = {
-        radius = 12;
+        radius = 10;
         width = 2;
       };
     };

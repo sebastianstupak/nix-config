@@ -152,11 +152,11 @@ let
   # that tooltip would render two identical rows and a third that repeats local
   # time — and Singapore's %Z is the unhelpful "+08", not "SGT".
   #
-  # What this gives up is real: the built-in module schedules its tick on the
-  # minute boundary, while a custom module's `interval` is phase-aligned to
-  # whenever waybar started. Hence interval = 10 below — the minute can flip up
-  # to 10s late instead of up to a minute late. The built-in calendar widget
-  # (scroll to change month) goes too; `cal` draws the same grid statically.
+  # Ticking is handled the same way the built-in module does it — on the minute
+  # boundary — by running as a long-lived script that sleeps to the next :00
+  # rather than being re-executed on an `interval` phase-aligned to whenever
+  # waybar started. The one thing genuinely lost is the built-in calendar
+  # widget's month scrolling; `cal` draws the same grid, statically.
   clockScript = pkgs.writeShellApplication {
     name = "waybar-clock";
     runtimeInputs = [
@@ -192,7 +192,10 @@ let
         [ "''${o:0:1}" = "-" ] && sign=-1
         echo $(( sign * (10#''${o:1:2} * 60 + 10#''${o:3:2}) ))
       }
-      local_min=$(off_min "$(date +%z)")
+      # Everything below is recomputed per tick, inside a function, because this
+      # module is long-running rather than re-executed (see the loop at the end).
+      emit() {
+        local_min=$(off_min "$(date +%z)")
 
       # %a matters as much as the time: at +6h, Bali is already tomorrow for a
       # good chunk of the local evening, and a bare 04:33 hides that.
@@ -231,7 +234,22 @@ let
         "$(date '+%A, %Y-%m-%d')" "$grid" "$(printf '%s\n' "''${lines[@]}")")
 
       jq -cn --arg t "$(date '+%H:%M %Z  %Y/%m/%d')" --arg tip "$tooltip" \
-        '{text: $t, tooltip: $tip}'
+          '{text: $t, tooltip: $tip}'
+      }
+
+      # Long-running, one JSON line per update — NOT a script waybar re-runs on
+      # an `interval`. An interval is phase-aligned to whenever waybar started,
+      # so it flips the minute up to a whole interval late: with 60s the clock
+      # was routinely a minute behind, and even 10s meant the digit changed when
+      # waybar felt like it rather than when the minute did. Sleeping to the
+      # boundary instead makes the clock change exactly when the clock changes,
+      # and costs one process for the session instead of one every few seconds.
+      while true; do
+        emit
+        # 10# forces base 10: `date +%S` renders eight seconds past as "08",
+        # which the shell would otherwise reject as invalid octal.
+        sleep $(( 60 - 10#$(date +%S) ))
+      done
     '';
   };
 
@@ -868,10 +886,11 @@ in
       "custom/clock" = {
         exec = lib.getExe clockScript;
         return-type = "json";
-        # 10s, not 60: see the note on clockScript — a custom module cannot
-        # align its tick to the minute, so this bounds how late the minute can
-        # flip. The script is a handful of `date` calls and one `cal`.
-        interval = 10;
+        # No `interval`: clockScript is a subscription-style module that prints a
+        # line per minute on the boundary. restart-interval is the safety net for
+        # the loop ever dying — without it waybar would leave the module blank
+        # for the rest of the session.
+        restart-interval = 5;
         # Opens the week view (modules/home/calendar.nix). Store path rather
         # than a bare `gnome-calendar`: waybar runs as a systemd user unit here,
         # so a PATH miss would fail silently on click with nothing in the log
@@ -1125,4 +1144,18 @@ in
       #idle_inhibitor.activated { color: @base0A; }
     '';
   };
+
+  # A reload is not enough for this bar. HM wires X-Reload-Triggers on the
+  # generated config/style plus ExecReload=kill -SIGUSR2, so a switch that only
+  # changes the config reloads waybar in place — and waybar's SIGUSR2 handler
+  # loads the new config WITHOUT re-arming the interval timers of custom
+  # modules. Observed exactly once and then obvious: the clock rendered the
+  # minute it reloaded and froze there, while `pgrep -P <waybar>` showed no
+  # waybar-clock or waybar-perf children at all.
+  #
+  # So turn the reload into a real restart. --no-block is load-bearing: without
+  # it systemd would sit inside the reload job waiting for a restart of the same
+  # unit to complete, which cannot happen until the reload finishes.
+  systemd.user.services.waybar.Service.ExecReload =
+    lib.mkForce "${pkgs.systemd}/bin/systemctl --user restart --no-block waybar.service";
 }

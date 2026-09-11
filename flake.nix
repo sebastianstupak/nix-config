@@ -243,6 +243,86 @@
         # (gdk-pixbuf, pango, atk, and xlib-2.0 from xorgproto) wired through
         # GI_TYPELIB_PATH, while linking gtk3 directly needs nothing but gtk3 —
         # which is already in the closure as a waybar dependency.
+        # Regression guards for bugs this config actually shipped, not
+        # hypothetical ones. Each assertion below corresponds to something that
+        # was live and wrong, and that nothing else would have caught: the
+        # generated JSON is valid either way, and waybar itself only logs a
+        # warning and carries on.
+        waybar-config = pkgs.runCommand "waybar-check-config" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+          python3 - "${
+            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/config".source
+          }" <<'PY'
+          import json, sys
+
+          cfg = json.load(open(sys.argv[1]))
+          bar = cfg[0] if isinstance(cfg, list) else cfg
+          fail = []
+
+          # Keys that configure the BAR rather than name a module. Anything
+          # else at top level is taken to be a module's config block.
+          BAR_KEYS = {
+              "layer", "position", "spacing", "height", "width", "margin",
+              "margin-top", "margin-bottom", "margin-left", "margin-right",
+              "output", "name", "mode", "exclusive", "passthrough", "ipc",
+              "id", "start_hidden", "fixed-center", "gtk-layer-shell",
+              "reload_style_on_change", "modules-left", "modules-center",
+              "modules-right",
+          }
+
+          listed = {m for k in ("modules-left", "modules-center", "modules-right")
+                    for m in bar.get(k, [])}
+          blocks = {k for k in bar if k not in BAR_KEYS}
+
+          # A config block for a module that is not on the bar is dead weight
+          # that reads as live - exactly how a renamed module leaves its old
+          # settings behind, silently doing nothing.
+          orphans = sorted(blocks - listed)
+          if orphans:
+              fail.append(f"config blocks for modules not on the bar: {orphans}")
+
+          # The volume bug, encoded. Wireplumber::handleScroll returns
+          # AModule::handleScroll the moment either on-scroll key exists,
+          # which skips its own max-volume clamp entirely - so setting these
+          # silently reintroduces "scrolling goes past 100%".
+          wp = bar.get("wireplumber", {})
+          bad = sorted(k for k in wp if k.startswith("on-scroll"))
+          if bad:
+              fail.append(
+                  f"wireplumber has {bad}: that bypasses the built-in volume "
+                  "clamp (see Wireplumber::handleScroll). Use scroll-step."
+              )
+          if "max-volume" not in wp:
+              fail.append("wireplumber has no max-volume; the ceiling is implicit")
+
+          if fail:
+              print("waybar config check FAILED:", file=sys.stderr)
+              for f in fail:
+                  print("  - " + f, file=sys.stderr)
+              sys.exit(1)
+          print("waybar config OK")
+          PY
+          touch $out
+        '';
+
+        # The placeholder hardware-configuration.nix booted this machine for
+        # months purely because its label stubs happened to match the disk. Fail
+        # loudly if one is ever committed again, rather than discovering it the
+        # next time a partition is relabelled.
+        hardware-config-is-real = pkgs.runCommand "hardware-config-is-real" { } ''
+          hw=${./hosts/workstation/hardware-configuration.nix}
+          if grep -q PLACEHOLDER "$hw"; then
+            echo "hosts/workstation/hardware-configuration.nix is still the placeholder." >&2
+            echo "Regenerate it ON the machine: nixos-generate-config --show-hardware-config" >&2
+            exit 1
+          fi
+          if ! grep -q "by-uuid" "$hw"; then
+            echo "hardware-configuration.nix does not address filesystems by UUID." >&2
+            echo "Label- or device-addressed roots break when a disk is relabelled." >&2
+            exit 1
+          fi
+          touch $out
+        '';
+
         waybar-style =
           pkgs.runCommand "waybar-check-style"
             {

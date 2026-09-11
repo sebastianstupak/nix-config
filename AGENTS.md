@@ -59,9 +59,16 @@ version the *running system* — use both.
    committed; edit them via `sops`. See `secrets/README.md`.
 6. **Do not run `nixos-rebuild switch` unprompted.** Propose the change and let
    the human apply it. `nixos-rebuild build` for verification is fine.
-7. **`hardware-configuration.nix` is currently a placeholder.** It is regenerated
-   on the real machine with `sudo nixos-generate-config --show-hardware-config`,
-   then committed. Do not "fix" it to boot — that happens on the laptop.
+7. **`hardware-configuration.nix` is generated, not written.** It now holds the
+   real hardware for `workstation` (UUID-addressed filesystems, the actual initrd
+   modules). Regenerate it **on that machine** with
+   `nixos-generate-config --show-hardware-config` — no sudo needed — and commit
+   the result. Never hand-edit it: anything you chose deliberately belongs in
+   `hosts/<host>/default.nix` or a module, or the next regeneration silently
+   drops it. `statix.toml` skips linting it, but `nix fmt` still formats it and
+   the `formatting` check still requires that, so run `nix fmt` after
+   regenerating. Drop the generator's unused `pkgs` argument, which
+   `deadnix --fail` rejects in the pre-commit hook.
 
 ## Project structure
 

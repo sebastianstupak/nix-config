@@ -1,37 +1,65 @@
-# PLACEHOLDER — DO NOT DEPLOY AS-IS. This will NOT boot a real machine.
+# Machine-specific hardware for host "workstation" — GENERATED, not hand-written.
 #
-# Generate the real file ON THE TARGET LAPTOP, after installing NixOS, with:
+# Regenerate on this machine (no sudo needed) and commit the result:
 #
-#     sudo nixos-generate-config --show-hardware-config \
+#     nixos-generate-config --show-hardware-config \
 #       > hosts/workstation/hardware-configuration.nix
 #
-# then `git add` and commit it. This file is machine-specific and MUST be
-# committed — untracked files are invisible to flake evaluation (see AGENTS.md).
+# Do not hand-edit. Anything you actually chose belongs in
+# hosts/workstation/default.nix or a module, or it is lost on the next
+# regeneration. statix.toml excludes this path from linting for that reason;
+# `nix fmt` does still format it, and the `formatting` check requires it.
 #
-# The stubs below only exist so the flake can be *evaluated* on another machine.
-{ lib, modulesPath, ... }:
+# Two deliberate deviations from raw generator output:
+#   - the `pkgs` argument is dropped, because it is unused here and the
+#     deadnix pre-commit hook (`deadnix --fail`) rejects it;
+#   - the stock header pointing at /etc/nixos/configuration.nix is replaced,
+#     since no such file exists in a flake-based repo.
+#
+# Everything below was verified against the running machine before committing:
+# both UUIDs resolve to the expected partitions (/ -> nvme0n1p2,
+# /boot -> nvme0n1p1) and both initrd modules are loaded.
+{
+  config,
+  lib,
+  modulesPath,
+  ...
+}:
 {
   imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
-  boot.initrd.availableKernelModules = [ ];
+  boot.initrd.availableKernelModules = [
+    "nvme"
+    "xhci_pci"
+  ];
   boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ ];
+  boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
 
-  # Replace with your real root filesystem.
-  fileSystems."/" = lib.mkDefault {
-    device = "/dev/disk/by-label/nixos";
+  fileSystems."/" = {
+    device = "/dev/disk/by-uuid/a14419bc-2ddc-453f-a029-362eab9653fa";
     fsType = "ext4";
   };
 
-  # Replace with your real EFI system partition.
-  fileSystems."/boot" = lib.mkDefault {
-    device = "/dev/disk/by-label/BOOT";
+  fileSystems."/boot" = {
+    device = "/dev/disk/by-uuid/CB59-E4E4";
     fsType = "vfat";
+    options = [
+      "fmask=0022"
+      "dmask=0022"
+    ];
   };
 
+  # Empty: this machine has no swap partition. Compressed swap in RAM comes from
+  # zramSwap in modules/nixos/core.nix, which is not a device and does not belong
+  # here. A real swap device (for hibernate) would be added by regenerating this
+  # file after partitioning.
   swapDevices = [ ];
 
-  networking.useDHCP = lib.mkDefault true;
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+
+  # mkDefault, so the explicit `= true` in modules/nixos/laptop.nix wins. Kept
+  # rather than deleted: it is what the generator emits, and on a host that does
+  # not import laptop.nix it is the thing that enables microcode at all.
+  hardware.cpu.amd.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
 }

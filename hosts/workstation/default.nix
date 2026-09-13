@@ -35,23 +35,33 @@
   # stranded. 20 keeps well over a month of rollback targets.
   boot.loader.systemd-boot.configurationLimit = 20;
 
+  # Users are fully declarative: nothing here is created or changed with
+  # `useradd`/`passwd`, and anything NOT declared is removed on activation.
+  #
+  # This is what makes hashedPasswordFile authoritative — update-users-groups.pl
+  # applies a declarative hash to an EXISTING user only when mutableUsers is
+  # false (`$sp_pwdp = ... if defined $u->{hashedPassword} && !$spec->{mutableUsers}`).
+  # With it true the hash sat there inert, which is how it was staged safely.
+  #
+  # The consequence worth remembering: `passwd` no longer changes your password.
+  # Rotating it means writing a new hash into secrets/passwords.yaml and
+  # rebuilding — see the secrets note below.
+  #
+  # Checked before enabling, because this flag removes undeclared state: the
+  # only normal user is sebastianstupak (the nixbld* accounts belong to the nix
+  # daemon), every group it actually holds is declared below, `users` is its
+  # declared primary group rather than a stray membership, and uid 1000 is
+  # pinned in /var/lib/nixos/uid-map so the dynamic allocation cannot move and
+  # orphan every file in $HOME.
+  users.mutableUsers = false;
+
   # Primary user.
   #
-  # `mutableUsers` is left at its default of TRUE, which is what makes wiring
-  # hashedPasswordFile safe to do before the hash is real. update-users-groups.pl
-  # applies a declarative hash to an EXISTING user only when mutableUsers is
-  # false (`$sp_pwdp = ... if defined $u->{hashedPassword} && !$spec->{mutableUsers}`)
-  # — so on this machine the password you already set with `passwd` keeps
-  # working and this line changes nothing, while a fresh install creates the user
-  # straight from the hash. That is the reproducibility win with no way to lock
-  # yourself out of your own laptop.
+  # The hash is the one already in /etc/shadow, copied across verbatim, and it
+  # was verified against libxcrypt's crypt(3) — the same function shadow uses —
+  # before mutableUsers was flipped. So enabling it changed no password.
   #
   # A missing file only warns; it does not fail the rebuild.
-  #
-  # TO FINISH: put a real hash in place, verify you can log in AND sudo with it,
-  # and only then set `users.mutableUsers = false` to make it authoritative:
-  #   mkpasswd -m yescrypt        # then paste into:
-  #   sops secrets/passwords.yaml
   users.users.sebastianstupak = {
     isNormalUser = true;
     description = "Sebastian Stupak";

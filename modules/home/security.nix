@@ -42,10 +42,27 @@ in
     enable = true;
     pinentry.package = pkgs.pinentry-qt;
     enableSshSupport = true;
-    defaultCacheTtl = 3600;
-    # Match the SSH cache to the GPG one; otherwise the signing key is dropped
-    # on the agent's much shorter SSH default and re-prompts mid-session.
-    defaultCacheTtlSsh = 3600;
+    # Unlock once a day, not once an hour.
+    #
+    # These two are different clocks and the distinction is the whole reason the
+    # old values misbehaved: default-cache-ttl is an IDLE timer reset on every
+    # use, while max-cache-ttl is a hard ceiling from when the passphrase was
+    # entered. At 3600/86400 a gap of more than an hour between signed commits
+    # dropped the key even though the 24h ceiling had hours left — which is
+    # exactly the pattern of real work, so it re-prompted constantly.
+    #
+    # Setting the idle timer equal to the ceiling means one unlock covers a
+    # working day regardless of how the gaps fall.
+    #
+    # The security trade is smaller than it looks. This cache lives in the
+    # agent's memory and only matters while the session is unlocked — and
+    # hypridle locks the screen after 5 minutes idle and suspends at 10
+    # (modules/home/hyprland.nix). It does NOT weaken the key at rest: the file
+    # in ~/.ssh stays passphrase-encrypted either way, which is what actually
+    # matters on a machine whose disk is not encrypted.
+    defaultCacheTtl = 86400;
+    maxCacheTtl = 86400;
+    defaultCacheTtlSsh = 86400;
     maxCacheTtlSsh = 86400;
   };
 

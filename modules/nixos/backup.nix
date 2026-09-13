@@ -60,9 +60,24 @@ in
       key = "restic-password";
     };
 
+    # Credentials for the destination, as KEY=VALUE lines that systemd loads as
+    # the service's environment (B2_ACCOUNT_ID/B2_ACCOUNT_KEY for Backblaze,
+    # AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for S3). Separate from the
+    # repository passphrase because they protect different things: this one
+    # authorises writing to the bucket, that one decrypts the snapshots.
+    #
+    # An environment file rather than a repository URL with the key baked in —
+    # a URL would land in the store and in `ps`. Harmless and unused for a local
+    # or sftp repository; leave the value empty in that case.
+    sops.secrets.restic-env = {
+      sopsFile = ../../secrets/backup.yaml;
+      key = "restic-env";
+    };
+
     services.restic.backups.home = {
       inherit (cfg) repository paths;
       passwordFile = config.sops.secrets.restic-password.path;
+      environmentFile = config.sops.secrets.restic-env.path;
 
       # Creates the repository on first run rather than failing until someone
       # remembers to `restic init` by hand.
@@ -103,7 +118,27 @@ in
       ];
     };
 
-    # `restic-home` for interactive use: listing snapshots and restoring needs the
+    # Wait for the network before running.
+    #
+    # The timer is Persistent, so on boot and resume it fires the run it missed
+    # while the machine was off — and without this that lands before
+    # NetworkManager has a connection. This is not hypothetical: the identical
+    # race hit vdirsyncer twice (see the ExecCondition note in
+    # modules/home/calendar.nix), both times within seconds of the machine
+    # coming back.
+    #
+    # Ordering rather than calendar.nix's skip-if-offline condition, because the
+    # two want opposite outcomes. A missed calendar sync is nothing; a backup
+    # that silently does not run is the whole failure mode backups exist to
+    # prevent, so this one should still fail loudly and light up the
+    # failed-units indicator. network-online.target is real here because
+    # NetworkManager-wait-online is enabled.
+    systemd.services.restic-backups-home = {
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+    };
+
+    # `restic` for interactive use: listing snapshots and restoring needs the
     # same repository and password the service uses, and typing those by hand is
     # how you discover your backup does not work.
     environment.systemPackages = [ pkgs.restic ];

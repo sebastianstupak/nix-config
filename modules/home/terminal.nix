@@ -24,6 +24,22 @@
       working-directory = "home";
       window-inherit-working-directory = false;
 
+      # How a bell is shown. Default is `no-system,no-audio,attention,title,
+      # no-border`; this trades `title` for `border`.
+      #
+      # `title` prepends a literal 🔔 emoji to the window title, which sits badly
+      # next to Claude Code's own title text and is the one place a colour-emoji
+      # font shows up in an otherwise monochrome, Kanagawa-themed desktop.
+      # `border` signals the same thing by outlining the alerted surface until
+      # it is refocused — same information, no glyph, and it marks WHICH split
+      # rang rather than just which window.
+      #
+      # `attention` is deliberately kept: it is what raises the window's urgency
+      # hint, which Hyprland turns into the workspace badge that waybar renders.
+      # Dropping it would silently remove that badge — see the transport notes in
+      # modules/home/claude-code.nix, where the bell exists to feed exactly that.
+      bell-features = "no-system,no-audio,attention,no-title,border";
+
       # Show the window title in ghostty itself rather than in waybar (which
       # deliberately has no `hyprland/window` module — see waybar.nix).
       #

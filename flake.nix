@@ -243,6 +243,13 @@
         # (gdk-pixbuf, pango, atk, and xlib-2.0 from xorgproto) wired through
         # GI_TYPELIB_PATH, while linking gtk3 directly needs nothing but gtk3 —
         # which is already in the closure as a waybar dependency.
+        # No ghostty-config check here, deliberately — it was tried and dropped.
+        # `ghostty +validate-config` prints `invalid value "..."` and still exits
+        # 0, so gating on it needs brittle stderr grepping, and it additionally
+        # fails in a build sandbox because Stylix writes its theme into
+        # ~/.config/ghostty/themes which does not exist there. A check that
+        # either passes vacuously or fails spuriously is worse than none.
+
         # Regression guards for bugs this config actually shipped, not
         # hypothetical ones. Each assertion below corresponds to something that
         # was live and wrong, and that nothing else would have caught: the

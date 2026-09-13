@@ -16,9 +16,12 @@
     ../../modules/nixos/containers.nix # docker
     ../../modules/nixos/netbird.nix # mesh VPN
     ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)
-    # TEMPORARILY DISABLED for a fast rebuild — re-enable once the desktop is up.
-    # It pulls shibco/ableton-linux (patched Wine, big from-source build).
-    # ../../modules/nixos/audio.nix # pro-audio + Ableton (shibco/ableton-linux)
+    # Pro-audio + Ableton via shibco/ableton-linux. Measured before enabling:
+    # 54 derivations built and 587 fetched (917 MiB), of which only
+    # ableton-wine and ableton-linkd are real from-source builds — that flake
+    # pins its own nixos-unstable, which cache.nixos.org already covers, so the
+    # "big from-source build" this import was parked for is mostly just Wine.
+    ../../modules/nixos/audio.nix
   ];
 
   networking.hostName = "workstation";

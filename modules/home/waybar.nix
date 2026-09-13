@@ -639,50 +639,47 @@ in
       ];
 
       "hyprland/workspaces" = {
-        # `{windows}` renders one glyph per window in the workspace, via the
-        # window-rewrite rules below. Everything rewrites to nothing except
-        # windows asking for attention, so a workspace shows its number alone
-        # until something there wants you — then it grows one bell per waiting
-        # window, which IS the count.
-        format = "{name}{windows}";
+        # Just the number. There used to be a `{windows}` bell-count here, and
+        # removing it was a deliberate trade, not an oversight.
+        #
+        # It worked by matching ghostty's `title` bell-feature, which prepends a bell
+        # emoji to the window title; a window-rewrite turned that into one glyph per
+        # waiting window. Dropping `title` from bell-features
+        # (modules/home/terminal.nix) — because the emoji is visible in ghostty's
+        # own titlebar and unwanted there — leaves nothing for that rule to match,
+        # so it was dead code that still read as live.
+        #
+        # What is lost is only the COUNT, and it was never reliable anyway: the
+        # title belongs to a window's active surface, so a bell in a background
+        # pane or tab never marked it, and two bells in one window still produced
+        # one glyph. What remains is the `.urgent` underline in the CSS below,
+        # fed by the independent `attention` bell-feature, which does fire for
+        # background panes — so "something on this workspace wants you" is still
+        # signalled in every case, including the ones the count missed.
+        #
+        # To restore it: put `title` back in bell-features, restore
+        # `format = "{name}{windows}"`, and re-add:
+        #     window-rewrite = { "title<.*BELL.*>" = "󰂚"; };
+        #     window-rewrite-default = "";   # else every window adds a glyph
+        #     format-window-separator = "";
+        format = "{name}";
         on-click = "activate";
 
-        # How a terminal app ends up here: Claude Code (or any program) writes
-        # BEL, ghostty's default bell-features includes `title`, so it prefixes
-        # the window title with 🔔 and holds it until the window is focused.
-        # Verified on this machine — the title genuinely becomes
-        # "🔔 ✳ Improve waybar functionality".
+        # How a bell reaches this module at all: Claude Code (or any program)
+        # writes BEL, and ghostty's `attention` bell-feature raises the window's
+        # urgency hint, which Hyprland forwards (`urgent>>` on its socket) and
+        # waybar turns into the `.urgent` class styled in the CSS below.
         #
-        # This counts ghostty WINDOWS, not panes, and only reflects each
-        # window's ACTIVE surface. Measured on this machine with a two-pane
-        # split and with two tabs:
+        # `attention` is the right transport for this because it is independent
+        # of the surface: measured on this machine, a bell in a BACKGROUND pane
+        # still emitted `urgent>>` even though the window title stayed unmarked.
+        # The title-based count that used to live here could not see those.
         #
-        #   bell in the active pane/tab    -> title marked, badge shows it
-        #   bell in a background pane/tab  -> title NOT marked, badge blind
-        #   bells in both panes            -> still one glyph, undercounted
-        #
-        # That is ghostty's `title` bell-feature working as designed: the window
-        # title belongs to the active surface, so a background surface ringing
-        # cannot change it.
-        #
-        # The gap is covered by the `.urgent` styling in the CSS below rather
-        # than here. ghostty's `attention` bell-feature is independent of
-        # `title`, and it DOES fire for background panes — verified: a bell in a
-        # background pane emitted `urgent>>` on Hyprland's socket while the
-        # title stayed unmarked. So the underline says "something here wants
-        # you" in every case, and the bells add "how many windows" when they can.
-        #
-        # A per-pane count is not reachable: `hyprctl clients` exposes no urgent
-        # field at all in 0.55.4, waybar's urgent handling is a single boolean
-        # class, and neither ghostty nor Hyprland surfaces per-surface state to
-        # an external process.
-        window-rewrite = {
-          "title<.*🔔.*>" = "󰂚";
-        };
-        # Empty, not the "?" default: without this every ordinary window would
-        # add a glyph and the badge would just be a window count.
-        window-rewrite-default = "";
-        format-window-separator = "";
+        # A per-pane count is not reachable by any route: `hyprctl clients`
+        # exposes no urgent field at all in 0.55.4, waybar's urgent handling is a
+        # single boolean class, and neither ghostty nor Hyprland surfaces
+        # per-surface state to an external process.
+
         # Always show 1-5 even when empty, so the bar doesn't reflow every time
         # a workspace empties out. 6-9 (bound in hyprland.nix) appear on demand.
         persistent-workspaces."*" = 5;
@@ -1060,16 +1057,12 @@ in
       }
       /* A workspace with something waiting.
 
-         This is NOT decoration for the badge — it is the half that catches what
-         the badge cannot see. window-rewrite matches the window title, which
-         only tracks a ghostty window's ACTIVE surface, so a bell in a
-         background pane or tab never marks it. ghostty's `attention` bell
-         feature is separate and fires regardless, which reaches waybar as
-         Hyprland's `urgent` event and lands here. Verified: a background-pane
-         bell produced this underline with no bell glyph beside the number.
-
-         So: underline = "something on this workspace wants you", bells = "how
-         many windows, where the ringing surface was the visible one".
+         This underline is now the ONLY bell signal on the bar, and it is the
+         more trustworthy of the two that used to be here. It is fed by ghostty's
+         `attention` bell-feature, which reaches waybar as Hyprland's `urgent`
+         event. Verified: a bell in a background pane produced this underline
+         even while the window title stayed unmarked — which is exactly the case
+         the old title-matched bell count was blind to.
 
          Selector deliberately mirrors Stylix's own `.modules-center #workspaces
          button.urgent` rather than the shorter `#workspaces button.urgent`:

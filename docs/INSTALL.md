@@ -5,7 +5,7 @@ disk** (no dual-boot). Read the whole thing once before you start. Commands assu
 a UEFI machine and an NVMe disk at `/dev/nvme0n1` — **confirm your disk with
 `lsblk` and substitute the real name** (it may be `/dev/sda`).
 
-> ⚠️ **Everything on the disk is destroyed.** Back up first (music projects,
+> **WARNING — everything on the disk is destroyed.** Back up first (music projects,
 > samples, VST installers + licenses, documents, eID certs). **Deauthorize
 > seat-limited plugin licenses in Windows first** (iLok / Native Access / Waves).
 

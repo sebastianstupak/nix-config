@@ -27,8 +27,8 @@
       # How a bell is shown. Default is `no-system,no-audio,attention,title,
       # no-border`; this trades `title` for `border`.
       #
-      # `title` prepends a literal 🔔 emoji to the window title, which sits badly
-      # next to Claude Code's own title text and is the one place a colour-emoji
+      # `title` prepends a literal bell emoji (U+1F514) to the window title, which sits
+      # badly next to Claude Code's own title text and was the one place a colour-emoji
       # font shows up in an otherwise monochrome, Kanagawa-themed desktop.
       # `border` signals the same thing by outlining the alerted surface until
       # it is refocused — same information, no glyph, and it marks WHICH split

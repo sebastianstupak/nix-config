@@ -41,9 +41,32 @@ let
   # anything, so re-running it to refresh the prefix will not reinstall.
   abletonInstall = pkgs.writeShellApplication {
     name = "ableton-install";
+    # setup-prefix.sh is a third-party script written for an interactive shell,
+    # so it reaches for whatever a normal PATH provides. That is invisible until
+    # it runs somewhere PATH is minimal — as a systemd service it failed on
+    # `flock is required to change this installation` — and cabextract and 7z
+    # were not installed at all, so the vcredist path would have failed later
+    # even from a terminal.
+    #
+    # Enumerated from the commands the script and its lib/ actually invoke,
+    # rather than added one crash at a time.
     runtimeInputs = [
       pkgs.coreutils
       pkgs.findutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.gawk
+      pkgs.util-linux # flock
+      pkgs.file
+      pkgs.unzip
+      pkgs.cabextract # unpacking the bundled VC++ redistributable
+      pkgs.p7zip
+      pkgs.procps # ps/pgrep, used to wait on wine processes
+      pkgs.diffutils # cmp, in lib/pipeasio.sh's alias consistency check
+      pkgs.bash # scripts re-invoke bash by name
+      pkgs.which
+      pkgs.glibc.bin # getent / ldd / getconf
+      abletonPkgs.default # wine, wineboot, wineserver
     ];
     text = ''
       dir="''${ABLETON_INSTALLER_DIR:-$HOME/Proprietary}"
@@ -160,6 +183,27 @@ in
       # Unpacking and running a Windows installer is slow, and killing it
       # half-way leaves a broken prefix.
       TimeoutStartSec = "2h";
+    };
+    # The unit's PATH, which the wrapper appends its own runtimeInputs in front
+    # of. NixOS builds Environment=PATH= from THIS, and ignores a
+    # serviceConfig.Environment that sets PATH — a line there looks load-bearing
+    # and does nothing, which cost a debugging round.
+    #
+    # Pointing at the system profile is the backstop for the real problem here:
+    # setup-prefix.sh is a third-party script written for an interactive shell,
+    # so pinning an exact tool list means every upstream change can surface as a
+    # runtime "command not found" (flock, then cmp, found exactly that way). The
+    # explicit runtimeInputs keep the common path reproducible; this keeps an
+    # addition upstream from breaking the install outright.
+    path = [ "/run/current-system/sw" ];
+    unitConfig = {
+      # The path unit re-triggers while the zip is present, so a service that
+      # fails would otherwise retry in a tight loop — which is exactly what
+      # happened: three restarts inside one second, then start-limit-hit. Give
+      # the limiter a window long enough that a genuine failure stops instead of
+      # spinning, and a retry after a fix is still allowed.
+      StartLimitIntervalSec = "1h";
+      StartLimitBurst = 3;
     };
   };
 }

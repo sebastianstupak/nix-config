@@ -11,3 +11,9 @@ result-*
 
 # VM images from `nixos-rebuild build-vm`
 *.qcow2
+
+# Playwright MCP scratch: page snapshots, console logs, and — the reason this
+# entry exists — a full copy of anything downloaded through the browser. A 3.1 GB
+# Ableton installer landed here and was committed by a `git add -A`, which GitHub
+# then refused ("pack exceeds maximum allowed size (2.00 GiB)").
+.playwright-mcp/

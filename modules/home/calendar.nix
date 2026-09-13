@@ -518,5 +518,27 @@ in
       "${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArgs (map vdirOf (lib.attrNames feeds))}"
       "${config.services.vdirsyncer.package}/bin/vdirsyncer discover"
     ];
+
+    # Don't try to sync before the network is up.
+    #
+    # The timer is Persistent, so on every boot and resume it immediately fires
+    # the run it missed while the machine was off — which lands before
+    # NetworkManager has a connection, and vdirsyncer dies with "Could not
+    # contact DNS servers". Observed twice, both times within seconds of the
+    # machine coming back, so this is the normal path rather than bad luck. The
+    # unit then sits `failed` until the next timer tick, which is exactly the
+    # sort of thing the failed-units indicator on the bar is meant to be
+    # trusted for — so a false positive here costs more than the missed sync.
+    #
+    # ExecCondition rather than ExecStartPre: a non-zero exit from a condition
+    # SKIPS the unit and still counts as a successful start, while the same exit
+    # from ExecStartPre fails it. That is the difference between "offline, so
+    # there was nothing to do" and "broken" — and on a laptop, genuinely being
+    # offline at the scheduled time is routine, not an error worth flagging.
+    #
+    # Bounded by nm-online's own default timeout (30s) so a permanently offline
+    # machine skips promptly instead of pinning the unit in `activating`.
+    systemd.user.services.vdirsyncer.Service.ExecCondition =
+      "${pkgs.networkmanager}/bin/nm-online -q -t 30";
   };
 }

@@ -99,6 +99,17 @@ let
       # exactly-matching installer rather than installing the newest found.
       export ABLETON_LIVE_AUTOINSTALL=1
       export ABLETON_INSTALLER_DIR="$dir"
+
+      # Always leave a log. Upstream's is opt-in via ABLETON_INSTALLER_LOG and
+      # unset by default, so a failed run's output dies with the terminal that
+      # showed it — which is exactly what happened the first several times this
+      # broke, leaving nothing to read afterwards. An install that unpacks 3.3 GB
+      # and can fail twenty minutes in should not be diagnosed from memory.
+      : "''${XDG_STATE_HOME:=$HOME/.local/state}"
+      mkdir -p "$XDG_STATE_HOME"
+      export ABLETON_INSTALLER_LOG="''${ABLETON_INSTALLER_LOG:-$XDG_STATE_HOME/ableton-install.log}"
+      printf 'log: %s\n' "$ABLETON_INSTALLER_LOG"
+
       exec ${setupPrefix} "$@"
     '';
   };

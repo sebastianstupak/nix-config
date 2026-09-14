@@ -9,6 +9,10 @@
 #   ableton-install        # creates/refreshes the prefix AND installs Live
 #   ableton-live           # launch
 #
+# Run `ableton-install` FROM A TERMINAL. It asks before stopping Wine and
+# refuses when it has no tty, so it cannot be driven from a systemd unit — see
+# the note further down where that automation used to live.
+#
 # `ableton-install` is defined below. The only step it cannot do for you is
 # supply the installer: Live is licensed software behind an account login with
 # no public URL, so the .zip has to be downloaded by hand into ~/Proprietary.
@@ -153,57 +157,28 @@ in
     abletonInstall
   ];
 
-  # Converge the prefix automatically, so the only manual act is putting the
-  # licensed zip somewhere — no command to remember, and a reinstall rebuilds
-  # the prefix on its own.
+  # There is deliberately NO systemd unit installing this automatically.
   #
-  # A .path unit rather than only running at login: dropping the zip into
-  # ~/Proprietary is the event that makes the install possible, so that is what
-  # should trigger it. PathExistsGlob re-arms after the service runs, so a later
-  # upgrade zip is picked up the same way.
-  systemd.user.paths.ableton-install = {
-    description = "Watch for an Ableton Live installer";
-    wantedBy = [ "default.target" ];
-    pathConfig.PathExistsGlob = "%h/Proprietary/ableton_live*.zip";
-  };
-
-  systemd.user.services.ableton-install = {
-    description = "Create the Ableton wineprefix and install Live";
-    # No wantedBy: this is started by the .path unit above, never on its own.
-    serviceConfig = {
-      Type = "oneshot";
-      # Skip silently when Live is already installed, rather than reinstalling
-      # every time the path unit re-arms. A condition exits the unit as
-      # SUCCESSFUL-but-skipped, so a machine that is already set up does not
-      # show a failed unit on the bar.
-      ExecCondition = pkgs.writeShellScript "ableton-not-installed" ''
-        ! ls "$HOME"/.wine-ableton/drive_c/ProgramData/Ableton/*/Program/"Ableton Live"*.exe >/dev/null 2>&1
-      '';
-      ExecStart = "${abletonInstall}/bin/ableton-install";
-      # Unpacking and running a Windows installer is slow, and killing it
-      # half-way leaves a broken prefix.
-      TimeoutStartSec = "2h";
-    };
-    # The unit's PATH, which the wrapper appends its own runtimeInputs in front
-    # of. NixOS builds Environment=PATH= from THIS, and ignores a
-    # serviceConfig.Environment that sets PATH — a line there looks load-bearing
-    # and does nothing, which cost a debugging round.
-    #
-    # Pointing at the system profile is the backstop for the real problem here:
-    # setup-prefix.sh is a third-party script written for an interactive shell,
-    # so pinning an exact tool list means every upstream change can surface as a
-    # runtime "command not found" (flock, then cmp, found exactly that way). The
-    # explicit runtimeInputs keep the common path reproducible; this keeps an
-    # addition upstream from breaking the install outright.
-    path = [ "/run/current-system/sw" ];
-    unitConfig = {
-      # The path unit re-triggers while the zip is present, so a service that
-      # fails would otherwise retry in a tight loop — which is exactly what
-      # happened: three restarts inside one second, then start-limit-hit. Give
-      # the limiter a window long enough that a genuine failure stops instead of
-      # spinning, and a retry after a fix is still allowed.
-      StartLimitIntervalSec = "1h";
-      StartLimitBurst = 3;
-    };
-  };
+  # It was tried and it cannot work. setup-prefix.sh must stop the Wine
+  # processes it spawned before swapping the finished prefix into place, and it
+  # refuses to do that unasked (lib/lifecycle.sh):
+  #
+  #     if [ ! -t 0 ]; then
+  #         echo "!! Wine is running. Run the installer in a terminal so it can
+  #               ask before stopping Wine." >&2
+  #         return 1
+  #
+  # With no tty it never even reaches the question, so the service failed about
+  # six minutes in, every time, after unpacking 3.3 GB.
+  #
+  # No env var bypasses it: lifecycle.sh honours only ABLETON_{DATA_HOME,
+  # LEFTOVER_AGENTS,SESSION_LABEL,STATE_HOME,WINEPREFIX,WINE_ROOT}. Faking a pty
+  # and feeding a canned "y" is the obvious next move and is a trap — the script
+  # asks two questions with different valid letters (q_stop_wine takes y/n,
+  # q_overwrite takes o/k/a), so a stream of "y" answers the first and then
+  # loops forever on the second until the timeout.
+  #
+  # So this stays `ableton-install`, run from a terminal. That is what upstream
+  # supports, and the gate is there for a good reason: it is asking permission
+  # to kill a Wine process that might be a running Live session.
 }

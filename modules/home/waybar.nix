@@ -662,7 +662,31 @@ in
         #     window-rewrite = { "title<.*BELL.*>" = "󰂚"; };
         #     window-rewrite-default = "";   # else every window adds a glyph
         #     format-window-separator = "";
-        format = "{name}";
+        # Each org's workspaces carry the org's glyph in the org's colour, so
+        # the bar answers "which org am I looking at" without being read.
+        #
+        # The colour is an inline pango span rather than CSS, because waybar
+        # exposes no per-workspace CSS class to hang it on — verified by
+        # styling `#workspaces button.datadir` and measuring the result: not a
+        # single coloured pixel. The module does render markup in the icon,
+        # which is the same route custom/perf already takes for its thresholds.
+        format = "{icon}";
+
+        # Keyed on the workspace NAME Hyprland gives each one, which is why the
+        # naming rule lives in modules/home/org.nix and is shared rather than
+        # repeated here. "1" is the scratch workspace and keeps its number; the
+        # default covers Hyprland's special workspaces, which have no org.
+        format-icons = {
+          "1" = "1";
+          default = "•";
+        }
+        // builtins.listToAttrs (
+          map (ws: {
+            inherit (ws) name;
+            value = ''<span color="#${colors.${ws.org.color}}">${ws.org.icon}</span>'';
+          }) config.my.orgLauncher.workspaces
+        );
+
         on-click = "activate";
 
         # How a bell reaches this module at all: Claude Code (or any program)
@@ -1056,8 +1080,20 @@ in
       #workspaces button.active {
         color: @base05;
       }
+      /* Occupancy, as opacity rather than colour.
+
+         It used to be `color: @base03`, which an org workspace no longer obeys:
+         its glyph carries an inline pango colour, and inline markup beats the
+         CSS `color` property. Opacity is applied to the whole button and
+         composites over whatever the markup painted, so it dims an org glyph
+         and a bare number alike while leaving the org's hue recognisable.
+
+         Measured on the real bar at 0.35: an occupied chip averaged
+         rgb(121,109,121) against rgb(70,63,68) empty — same hue, unmistakably
+         different weight. 0.45 here trades a little of that separation back for
+         legibility, since at login every org workspace is empty. */
       #workspaces button.empty {
-        color: @base03;
+        opacity: 0.45;
       }
       /* A workspace with something waiting.
 

@@ -155,10 +155,23 @@
   # company domain, a CLA that checks the author), change that one line; nothing
   # else moves.
   #
-  # Each also owns a workspace, named after the org in the bar. 1 is left
-  # unclaimed on purpose: it is where you land at login and where anything that
-  # belongs to no org goes — this config, a scratch shell, a browser you opened
-  # to look something up. $mod+O picks an org; see modules/home/org.nix.
+  # Each org owns a PAIR of workspaces and wears one glyph in one colour on
+  # both, so the bar reads as four coloured pairs: where you are, and which of
+  # the org's two screens you are on. The first of each pair is the org's home —
+  # `org <name>` lands there and opens its terminal there; the second is for
+  # whatever wants its own screen, a browser or a running log.
+  #
+  # 2-9 are spoken for, which is exactly the range $mod+1..9 already binds.
+  # 1 is left unclaimed on purpose: it is where you land at login and where
+  # anything belonging to no org goes — this config, a scratch shell, a browser
+  # opened to look one thing up. $mod+O picks an org; see modules/home/org.nix.
+  #
+  # Icons are checked against the bar's font before being used here (a missing
+  # glyph renders as an empty box, which reads as a bug): each was rendered on
+  # the real bar and looked at. Colours are base16 KEYS, not hex, so the orgs
+  # follow the theme. base08 is deliberately unused — the bar spends it on
+  # critical states, and an org permanently wearing the alarm colour would stop
+  # the alarm meaning anything.
   my.orgs =
     let
       me = "sebastian.stupak@pm.me";
@@ -166,19 +179,39 @@
     {
       datadir = {
         email = me;
-        workspace = 2;
+        workspaces = [
+          2
+          3
+        ];
+        icon = "󰆼"; # database
+        color = "base0D"; # blue
       };
       hettify = {
         email = me;
-        workspace = 3;
+        workspaces = [
+          4
+          5
+        ];
+        icon = "󰒋"; # server
+        color = "base0E"; # mauve
       };
       bunny = {
         email = me;
-        workspace = 4;
+        workspaces = [
+          6
+          7
+        ];
+        icon = "󰤇"; # rabbit
+        color = "base0A"; # sand
       };
       personal = {
         email = me;
-        workspace = 5;
+        workspaces = [
+          8
+          9
+        ];
+        icon = "󰋜"; # house
+        color = "base0B"; # green
       };
     };
 

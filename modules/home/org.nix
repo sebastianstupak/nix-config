@@ -1,20 +1,21 @@
-# One workspace per org, and the `org` command that lands you on it.
+# An org's workspaces, and the `org` command that lands you on them.
 #
 # The org list itself lives in home/<user>/default.nix; this module is what
 # turns an entry with a `workspace` into a place you can actually go.
 #
-# `org <name>` switches to that org's workspace and — unless its terminal is
-# already sitting there — starts one in the org's directory, plus whatever
-# `apps` it declares. Everything downstream of the directory then agrees without being
+# An org owns one or more workspaces. The first is its home: `org <name>`
+# switches there and — unless its terminal is already sitting there — starts one
+# in the org's directory, plus whatever `apps` it declares. The rest are the
+# same org's other screens, reachable with the ordinary $mod+N binds. Everything downstream of the directory then agrees without being
 # told: git picks the org's commit identity (modules/home/git.nix), `claude`
 # picks the org's account and MCP servers (modules/home/claude-code-profiles.nix).
 # Starting the terminal somewhere else and cd-ing in works just as well; the
 # launcher is a shortcut, not the mechanism.
 #
 # Workspaces are declared `persistent:true` so they exist from login rather than
-# springing into being on first use. That is what lets the bar show four org
-# names in a fixed layout instead of a row that reshuffles as you work — and it
-# is why waybar's own numeric placeholders are turned down to one (see
+# springing into being on first use. That is what lets the bar show a fixed row
+# of org glyphs instead of one that reshuffles as you work — and it is why
+# waybar's own numeric placeholders are turned down to one (see
 # modules/home/waybar.nix); with both, the placeholder wins and every org shows
 # up as a bare number.
 {
@@ -24,10 +25,10 @@
   ...
 }:
 let
-  # Only orgs that asked for a workspace. An org without one is still a real
+  # Only orgs that asked for workspaces. An org without any is still a real
   # org — it has an identity and a directory — it just has nowhere to land.
   named = lib.mapAttrsToList (name: org: { inherit name org; }) (
-    lib.filterAttrs (_: org: org.workspace != null) config.my.orgs
+    lib.filterAttrs (_: org: org.workspaces != [ ]) config.my.orgs
   );
 
   orgNames = map ({ name, ... }: name) named;
@@ -47,13 +48,35 @@ let
 
   commandsFor = org: [ "${terminal} --working-directory=${org.directory}" ] ++ org.apps;
 
+  # The org's home workspace: where `org <name>` lands and where its terminal
+  # starts. The rest are the same org's other screens.
+  homeWorkspaceOf = org: builtins.head org.workspaces;
+
+  # Hyprland workspace names must be unique, so only the first carries the bare
+  # org name and the rest are suffixed. The bar keys its icons off exactly these
+  # strings, which is why this is one function rather than two conventions that
+  # would drift the first time a third screen is added.
+  workspaceName = name: index: if index == 0 then name else "${name}-${toString (index + 1)}";
+
+  # Flattened [{ id, name, org }] over every org workspace, in id order. Shared
+  # by the Hyprland rules, the duplicate-id assertion and modules/home/waybar.nix.
+  allWorkspaces = lib.sort (a: b: a.id < b.id) (
+    lib.concatMap (
+      { name, org }:
+      lib.imap0 (index: id: {
+        inherit id org;
+        name = workspaceName name index;
+      }) org.workspaces
+    ) named
+  );
+
   # One `case` arm per org. Each command is quoted as a single word, so an app
   # with arguments survives the trip into the array intact.
   orgArms = lib.concatMapStrings (
     { name, org }:
     ''
       ${lib.escapeShellArg name})
-        ws=${toString org.workspace}
+        ws=${toString (homeWorkspaceOf org)}
         dir=${lib.escapeShellArg org.directory}
         apps=(${lib.concatMapStringsSep " " lib.escapeShellArg (commandsFor org)})
         ;;
@@ -163,6 +186,17 @@ in
       type = lib.types.package;
       description = "The terminal package whose app-id `terminalClass` names.";
     };
+
+    workspaces = lib.mkOption {
+      internal = true;
+      type = lib.types.listOf (lib.types.attrsOf lib.types.unspecified);
+      description = ''
+        Every org workspace as { id, name, org }, in id order. The bar needs
+        the same names Hyprland gives these workspaces in order to put the
+        right glyph on them; sharing the derived list is what stops the naming
+        rule from being written down twice.
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -170,6 +204,7 @@ in
       my.orgLauncher = {
         inherit terminalClass;
         terminalPackage = config.programs.ghostty.package;
+        workspaces = allWorkspaces;
       };
 
       # Every org's directory, workspace or not. git's `includeIf gitdir:` and
@@ -185,10 +220,24 @@ in
     (lib.mkIf (named != [ ]) {
       assertions = [
         {
-          assertion = lib.length (lib.unique (map ({ org, ... }: org.workspace) named)) == lib.length named;
+          # An org with workspaces but no glyph would render as an empty span:
+          # a chip you can click but cannot see, which reads as the bar being
+          # broken rather than as a missing setting.
+          assertion = lib.all ({ org, ... }: org.icon != "") named;
           message = ''
-            my.orgs: two orgs claim the same workspace. Each org needs its own,
-            or `org <name>` would take you to someone else's screen.
+            my.orgs: an org with workspaces has no icon. The bar shows the glyph
+            instead of the workspace number, so without one its workspaces are
+            invisible. Pick one the bar's font has:
+              fc-list ':charset=<codepoint>' family
+          '';
+        }
+        {
+          assertion =
+            lib.length (lib.unique (map ({ id, ... }: id) allWorkspaces)) == lib.length allWorkspaces;
+          message = ''
+            my.orgs: two orgs claim the same workspace number. Each needs its
+            own, or `org <name>` would take you to someone else's screen and the
+            bar would show one org's glyph on another's workspace.
           '';
         }
       ];
@@ -202,8 +251,8 @@ in
         # exists under its number keeps that number until the next Hyprland
         # start, which is why this reads as a no-op on a live `hyprctl reload`.
         workspace = map (
-          { name, org }: "${toString org.workspace}, defaultName:${name}, persistent:true"
-        ) named;
+          { id, name, ... }: "${toString id}, defaultName:${name}, persistent:true"
+        ) allWorkspaces;
 
         # $mod+O picks an org. The numeric $mod+N binds in hyprland.nix still
         # work and are the faster route once you know which number an org is;

@@ -65,18 +65,57 @@
               '';
             };
 
-            workspace = lib.mkOption {
-              type = lib.types.nullOr lib.types.ints.positive;
-              default = null;
-              example = 2;
+            workspaces = lib.mkOption {
+              type = lib.types.listOf lib.types.ints.positive;
+              default = [ ];
+              example = [
+                2
+                3
+              ];
               description = ''
-                Hyprland workspace this org owns. The workspace is created at
-                startup and named after the org, so the bar says which org you
+                Hyprland workspaces this org owns, in order. They are created at
+                startup and named after the org, so the bar shows which org you
                 are looking at rather than a number.
 
-                Null keeps the org off the workspace layout entirely: it still
-                gets a commit identity and a directory, it just has no screen of
-                its own and does not appear in the `org` launcher.
+                The FIRST is the org's home: `org <name>` lands there and starts
+                the terminal there. The rest are that org's other screens — a
+                browser, docs, a long-running log — reachable with the ordinary
+                $mod+N binds.
+
+                An empty list keeps the org off the workspace layout entirely:
+                it still gets a commit identity, a directory and its own
+                assistant profile, it just has no screen of its own and does not
+                appear in the `org` launcher.
+              '';
+            };
+
+            icon = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+              example = "󰆼";
+              description = ''
+                Glyph shown on each of this org's workspaces in the bar, in
+                place of the workspace number.
+
+                Must exist in the bar's font — check before choosing, with
+                `fc-list ':charset=<codepoint>' family`. A glyph the font does
+                not have renders as an empty box, which looks like a bug rather
+                than a missing icon.
+              '';
+            };
+
+            color = lib.mkOption {
+              type = lib.types.str;
+              default = "base05";
+              example = "base0D";
+              description = ''
+                base16 slot used to colour this org's workspace glyphs, as a
+                scheme KEY rather than a hex value, so the orgs re-colour with
+                the theme instead of pinning four colours from one scheme.
+
+                base08-base0F are the accents. Avoid base08: the bar already
+                uses it for critical states, and an org permanently wearing the
+                alarm colour stops the alarm from meaning anything.
               '';
             };
 

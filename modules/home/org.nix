@@ -55,10 +55,19 @@ let
   # Closing this window does not end the session: herdr's server keeps the panes
   # running and the next `org <name>` reattaches to them. See
   # modules/home/herdr.nix.
+  # `--confirm-close-surface=false` applies to THIS window only, not to the
+  # terminal's global setting, so a scratch shell elsewhere still asks before
+  # taking a running process down with it.
+  #
+  # It is off here because the prompt it suppresses says "All terminal sessions
+  # in this window will be terminated", and in an org window that is simply
+  # untrue: the panes live in herdr's server and closing the window detaches
+  # from them. A confirmation that misstates what is about to happen is worse
+  # than no confirmation — verified by screenshotting the dialog.
   commandsFor =
     name: org:
     [
-      "${terminal} --working-directory=${org.directory} -e ${lib.getExe config.my.herdr.package} --session ${name}"
+      "${terminal} --working-directory=${org.directory} --confirm-close-surface=false -e ${lib.getExe config.my.herdr.package} --session ${name}"
     ]
     ++ org.apps;
 

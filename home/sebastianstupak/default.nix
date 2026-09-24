@@ -143,16 +143,24 @@
   # The orgs this machine is used for. Directory is the boundary: anything under
   # ~/dev/<org>/ commits as that org (see modules/home/orgs.nix).
   #
-  # hettify and bunny have no address yet, so repos under them keep the global
-  # identity below rather than being attributed to a guess — a wrong address on
-  # a signed commit only surfaces after it is pushed. Fill them in and they take
-  # effect on the next rebuild.
-  my.orgs = {
-    personal.email = "sebastian.stupak@pm.me";
-    datadir.email = "sebastian.stupak@datadir.co";
-    hettify = { };
-    bunny = { };
-  };
+  # One address for all of them, deliberately. Each org still pins it explicitly
+  # instead of inheriting the global identity below, so that changing the global
+  # address later does not silently re-author four orgs' worth of commits — the
+  # answer to "who does this org commit as" stays written down per org.
+  #
+  # If an org ever needs its own address (a GitHub org that enforces a verified
+  # company domain, a CLA that checks the author), change that one line; nothing
+  # else moves.
+  my.orgs =
+    let
+      me = "sebastian.stupak@pm.me";
+    in
+    {
+      personal.email = me;
+      datadir.email = me;
+      hettify.email = me;
+      bunny.email = me;
+    };
 
   # Per-user git identity (shared git config lives in modules/home/git.nix).
   programs.git.settings.user = {

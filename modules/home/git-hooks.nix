@@ -45,6 +45,29 @@ let
   ];
   vendorAlt = lib.concatStringsSep "|" vendors;
 
+  # A mention that is PART OF A NAME is a reference, not attribution. Without
+  # this carve-out the policy forbids the repo from describing its own contents:
+  # "docs: update CLAUDE.md", "rename claudeProfile", "fix modules/home/
+  # claude-code.nix" are all ordinary commit messages and all were rejected.
+  # Measured on this repo's own history before the rule was tightened: four
+  # messages in a row had to be reworded around it.
+  #
+  # The shapes below are what a path or an identifier looks like and what prose
+  # does not: a backtick span, a token with a slash, a dotted name, snake_case,
+  # camelCase. They are REMOVED before the mention check, so the vendor name in
+  # `CLAUDE.md` is invisible to it while "ask claude about it" is untouched.
+  #
+  # This is a convention, not a security boundary — someone determined to write
+  # "claude/" instead of "claude" defeats it, and that is fine. It exists to stop
+  # honest messages being blocked.
+  codeShaped = [
+    "s/`[^`]*`/ /g" # `backticked spans`
+    "s#(^|[[:space:]])[^[:space:]]*/[^[:space:]]*#\\1#g" # a/path/like/this
+    "s/(^|[[:space:]])[A-Za-z0-9_-]+\\.[A-Za-z0-9_.-]+/\\1/g" # dotted.names
+    "s/(^|[[:space:]])[A-Za-z0-9-]*_[A-Za-z0-9_-]*/\\1/g" # snake_case
+    "s/(^|[[:space:]])[a-z]+[A-Z][A-Za-z0-9]*/\\1/g" # camelCase
+  ];
+
   # Phrasings that give it away without naming anyone.
   phrases = [
     "ai[ -]generated"
@@ -92,11 +115,22 @@ let
       fi
 
       # 2. Any remaining mention is a human decision — report, do not rewrite.
-      #    Comment lines are git's own template and are never committed.
+      #    Comment lines are git's own template and are never committed, and
+      #    path- and identifier-shaped tokens are references rather than
+      #    attribution (see codeShaped above).
+      # shellcheck disable=SC2016  # the single quotes are the point: these are
+      # sed expressions, and the backticks in the first one are a literal to
+      # match, not a command substitution.
+      prose() {
+        grep -v '^[[:space:]]*#' "$msg_file" | sed -E ${
+          lib.concatMapStringsSep " " (e: "-e ${lib.escapeShellArg e}") codeShaped
+        }
+      }
+
       # printf rather than a heredoc: this text is embedded in a Nix indented
       # string, which strips only the common prefix, so heredoc body lines
       # would keep their relative indentation.
-      if grep -v '^[[:space:]]*#' "$msg_file" | grep -qiE ${lib.escapeShellArg mentionPattern}; then
+      if prose | grep -qiE ${lib.escapeShellArg mentionPattern}; then
         printf '%s\n' \
           "" \
           "  Commit message names an AI vendor, or says it was AI-written." \
@@ -106,6 +140,9 @@ let
           "  than silently rewritten." \
           "" \
           "  Describe the change itself, not the tool used to write it." \
+          "" \
+          "  Naming a file or an option is fine — \`CLAUDE.md\`, claudeProfile," \
+          "  modules/home/claude-code.nix. It is prose that is rejected." \
           "" \
           "  To bypass once:  git commit --no-verify" \
           "" >&2

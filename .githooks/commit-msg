@@ -28,11 +28,27 @@ if grep -qiE "^[[:space:]]*(co-authored-by:[[:space:]]*.*\b($vendors)|claude-ses
   exit 1
 fi
 
-# 2. Any other mention, anywhere in the message. Comment lines are git's own
-#    template and never reach the commit, so they are excluded.
-if grep -v '^[[:space:]]*#' "$msg_file" | grep -qiE "\b($vendors)|$phrases"; then
+# 2. Any other mention, anywhere in the message.
+#
+#    Excluded from the check: git's own comment lines, which never reach the
+#    commit, and anything shaped like a path or an identifier — a backtick span,
+#    a slashed token, a dotted name, snake_case, camelCase. Naming a file is a
+#    reference, not attribution, and without this the repo cannot describe its
+#    own contents: "docs: update CLAUDE.md" and "rename claudeProfile" were both
+#    rejected before this carve-out existed.
+prose() {
+  grep -v '^[[:space:]]*#' "$msg_file" \
+    | sed -E -e 's/`[^`]*`/ /g' \
+             -e 's#(^|[[:space:]])[^[:space:]]*/[^[:space:]]*#\1#g' \
+             -e 's/(^|[[:space:]])[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+/\1/g' \
+             -e 's/(^|[[:space:]])[A-Za-z0-9-]*_[A-Za-z0-9_-]*/\1/g' \
+             -e 's/(^|[[:space:]])[a-z]+[A-Z][A-Za-z0-9]*/\1/g'
+}
+
+if prose | grep -qiE "\b($vendors)|$phrases"; then
   echo "Commit message names an AI vendor, or says it was AI-written." >&2
   echo "Describe the change itself, not the tool used to write it." >&2
+  echo "Naming a file or an option is fine; it is prose that is rejected." >&2
   echo "To bypass once:  git commit --no-verify" >&2
   exit 1
 fi

@@ -351,6 +351,29 @@
               done
               echo "  ok: cursor / gemini / llm are not false positives"
 
+              # --- 9b. a vendor name inside a PATH or IDENTIFIER is a
+              # reference, not attribution, and must not block the commit.
+              # Without this the repo cannot describe its own files.
+              for good in \
+                "docs: update CLAUDE.md with the new steps" \
+                "refactor(home): rename claudeProfile to something clearer" \
+                "fix(home): typo in modules/home/claude-code.nix" \
+                "feat(home): the \`claude\` wrapper picks a profile per directory" \
+                "chore: bump claude_code_sdk to the current release"
+              do
+                fresh
+                printf '%s\n' "$good" > m
+                git commit -q -F m || fail "name-shaped mention should be allowed: $good"
+              done
+              echo "  ok: paths and identifiers naming a vendor are allowed"
+
+              # ...and the carve-out must not swallow prose that happens to sit
+              # near one. The vendor word here is bare, on its own line.
+              fresh
+              printf '%s\n\n%s\n' "docs: update CLAUDE.md" "Asked claude to write this bit." > m
+              if git commit -q -F m 2>/dev/null; then fail "prose alongside a filename should still be rejected"; fi
+              echo "  ok: prose is still rejected when a filename is also present"
+
               # --- 10. this repo's own hook agrees with the global policy ---
               # .githooks/commit-msg shadows the global hook inside this repo
               # (core.hooksPath), so it carries its own copy of the word list.
@@ -381,6 +404,9 @@
                 "feat: ask claude about it" \
                 "fix(ui): restore the cursor position after a reflow" \
                 "feat(net): add a gemini protocol client" \
+                "docs: update CLAUDE.md with the new steps" \
+                "refactor(home): rename claudeProfile to something clearer" \
+                "fix(home): typo in modules/home/claude-code.nix" \
                 "refactor(core): split the parser"
               do
                 g="$(verdict "$TMPDIR/globalhooks/commit-msg" "$msg")"

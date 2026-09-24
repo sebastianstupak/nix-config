@@ -28,6 +28,10 @@
 # the part that makes "separate subscription" a guarantee rather than a habit:
 # logging into the work tree with the personal account stops being a thing you
 # can do without noticing.
+#
+# Every org in `my.orgs` gets a profile automatically (see the `config` block at
+# the bottom), rooted at the org's own directory. Declaring one by hand is for
+# the extras — MCP servers, a pinned account, seed instructions.
 {
   config,
   lib,
@@ -246,6 +250,19 @@ in
   };
 
   config = {
+    # Every org gets a profile without having to ask for one. An org that is
+    # worth a separate commit identity and a workspace is worth a separate
+    # Claude account, and the alternative — declaring them one at a time — means
+    # the newest org, the one you are least used to, is the one still running on
+    # the default account.
+    #
+    # These merge with any hand-written entry of the same name rather than
+    # replacing it, so an org can still add MCP servers, an account to pin, or
+    # seed instructions. `my.orgs.<name>.claudeProfile = false` opts out.
+    my.claude.profiles = lib.mapAttrs (_: _: { }) (
+      lib.filterAttrs (_: org: org.claudeProfile) config.my.orgs
+    );
+
     my.claude.configDirs = [ "${homeDir}/.claude" ] ++ profileConfigDirs;
 
     # The only `claude` on PATH. dev.nix installs no claude-code package of its

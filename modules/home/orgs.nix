@@ -80,6 +80,26 @@
               '';
             };
 
+            claudeProfile = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Give this org its own Claude Code profile: its own login and
+                subscription, its own MCP servers, its own history and project
+                state, used automatically by `claude` anywhere under
+                `directory`.
+
+                On by default because the failure it prevents is silent — work
+                landing on a personal subscription, or a personal session
+                holding a work tracker's OAuth token — and because nothing
+                signals it at the time. The cost is one `/login` per org, once.
+
+                Turn it off for an org that should just use the default account;
+                repos under it then behave like any other directory. Details of
+                the mechanism: modules/home/claude-code-profiles.nix.
+              '';
+            };
+
             apps = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];

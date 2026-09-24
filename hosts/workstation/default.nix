@@ -21,8 +21,15 @@
     # ableton-wine and ableton-linkd are real from-source builds — that flake
     # pins its own nixos-unstable, which cache.nixos.org already covers, so the
     # "big from-source build" this import was parked for is mostly just Wine.
-    ../../modules/nixos/audio.nix
+    ../../modules/nixos/audio.nix # inert until my.ableton.enable below
   ];
+
+  # Pro-audio + Ableton Live. Opt-in rather than implied by the import, because
+  # it changes the kernel command line (threadirqs), loads a boot-time module
+  # (ntsync) and grants the audio group realtime scheduling — none of which
+  # should arrive on a host as a side effect of importing a file. See
+  # docs/ABLETON.md.
+  my.ableton.enable = true;
 
   networking.hostName = "workstation";
 

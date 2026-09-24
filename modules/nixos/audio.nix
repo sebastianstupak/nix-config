@@ -1,51 +1,31 @@
 # Pro-audio profile: low-latency PipeWire (JACK), realtime scheduling for the
-# audio group, NTSync + the Wine-based Ableton runtime (shibco/ableton-linux).
+# audio group, NTSync, and the Wine-based Ableton Live runtime
+# (shibco/ableton-linux).
 #
-# This is the declarative system groundwork. The wineprefix itself is imperative
-# state in $HOME — Nix cannot own a 4 GB directory that a Windows installer
-# writes to — so the goal here is not to make it declarative but to make
-# recreating it one command that needs nothing remembered:
+# OPT-IN. Importing this module does nothing; a host must set
+# `my.ableton.enable = true`. See the option below for why.
 #
-#   ableton-install        # creates/refreshes the prefix AND installs Live
-#   ableton-live           # launch
+# Full documentation — what it sets up, the reproducible/derived split that the
+# backup config depends on, plugin handling, and the known rough edges — lives
+# in docs/ABLETON.md. Kept there rather than here because it is a workflow
+# people follow on a new machine, not a rationale for a line of Nix.
 #
-# Run `ableton-install` FROM A TERMINAL. It asks before stopping Wine and
-# refuses when it has no tty, so it cannot be driven from a systemd unit — see
-# the note further down where that automation used to live.
+# The short version:
 #
-# `ableton-install` is defined below. The only step it cannot do for you is
-# supply the installer: Live is licensed software behind an account login with
-# no public URL, so the .zip has to be downloaded by hand into ~/Proprietary.
-# Run the command once with the directory empty and it tells you exactly that.
+#   ableton-install   build the prefix and install Live (FROM A TERMINAL)
+#   ableton-live      launch; also applies a .auz authorisation file
+#   ableton-wine      plain wine bound to this prefix, for plugin installers
 #
-# Authorising Live (offline, with your licence) stays manual for the same
-# reason: `ableton-live <file>.auz` applies the response file — the launcher
-# detects the extension and hands it to Live rather than opening it as a set.
-#
-# PLUGINS. They must be WINDOWS VSTs. Live here is a Windows binary under Wine,
-# so a Linux-native .so VST3 cannot load into it no matter where it is put —
-# which is the counterintuitive part on a Linux machine, and the easiest way to
-# waste an evening. Get the Windows build of the plugin.
-#
-#   installer-based:  ableton-wine ~/proprietary/SomePlugin-Setup.exe
-#   drag-and-drop:    copy the .vst3 into
-#                     ~/.wine-ableton/drive_c/Program Files/Common Files/VST3
-#                     (VST2 .dll -> .../Program Files/VstPlugins)
-#
-# `ableton-wine` is plain wine bound to this prefix, so any Windows installer
-# runs through it. Then in Live: Preferences > Plug-Ins, enable the VST3/VST2
-# system folders and Rescan.
-#
-# Keep the installers in ~/proprietary beside the Live zip. They are licensed
-# artifacts that cannot live in the store or in git, and grouping them means a
-# rebuild-from-scratch has one directory to restore rather than a hunt.
-#
-# Copy-protected plugins (iLok, eLicenser and friends) are the usual thing that
-# does not survive Wine — expect those to be the exception rather than the rule.
-#
-# See the project README for plugin/DRM caveats.
-{ inputs, pkgs, ... }:
+{
+  config,
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
 let
+  cfg = config.my.ableton;
+
   abletonPkgs = inputs.ableton-linux.packages.${pkgs.stdenv.hostPlatform.system};
 
   # The upstream prefix script, taken from the LOCKED input rather than invoked
@@ -174,81 +154,107 @@ let
   };
 in
 {
-  # Route JACK clients through PipeWire (pipewire itself is enabled in desktop.nix).
-  services.pipewire.jack.enable = true;
+  # Opt-in, like my.backup.repository. Importing this module is NOT enough —
+  # the whole slice stays inert until a host asks for it.
+  #
+  # It is gated because it is expensive and specific in a way the rest of the
+  # modules are not: it pulls a patched Wine from a flake that deliberately does
+  # not follow this nixpkgs, adds realtime scheduling limits for the audio
+  # group, and changes the KERNEL COMMAND LINE (threadirqs) plus a boot-time
+  # module (ntsync). None of that belongs on a host that is not making music,
+  # and threadirqs in particular is a system-wide latency/throughput trade that
+  # should never arrive as a side effect of importing a file.
+  #
+  # See docs/ABLETON.md for what it sets up and how to restore it on a new
+  # machine.
+  options.my.ableton.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Pro-audio profile and the Wine-based Ableton Live runtime.
 
-  # A low-latency clock profile for production work.
-  services.pipewire.extraConfig.pipewire."92-low-latency" = {
-    "context.properties" = {
-      "default.clock.rate" = 48000;
-      "default.clock.quantum" = 256;
-      "default.clock.min-quantum" = 64;
-      "default.clock.max-quantum" = 1024;
-    };
+      Off by default. Enabling changes kernel parameters, so it needs a reboot
+      rather than just a switch.
+    '';
   };
 
-  # Realtime scheduling limits for the audio group (rtkit is enabled in
-  # desktop.nix; the user is in the `audio` group via the host config).
-  security.pam.loginLimits = [
-    {
-      domain = "@audio";
-      type = "-";
-      item = "memlock";
-      value = "unlimited";
-    }
-    {
-      domain = "@audio";
-      type = "-";
-      item = "rtprio";
-      value = "99";
-    }
-    {
-      domain = "@audio";
-      type = "-";
-      item = "nice";
-      value = "-19";
-    }
-  ];
+  config = lib.mkIf cfg.enable {
+    # Route JACK clients through PipeWire   (pipewire itself is enabled in desktop.nix).
+    services.pipewire.jack.enable = true;
 
-  # Threaded IRQs reduce audio latency/xruns.
-  boot.kernelParams = [ "threadirqs" ];
+    # A low-latency clock profile for production work.
+    services.pipewire.extraConfig.pipewire."92-low-latency" = {
+      "context.properties" = {
+        "default.clock.rate" = 48000;
+        "default.clock.quantum" = 256;
+        "default.clock.min-quantum" = 64;
+        "default.clock.max-quantum" = 1024;
+      };
+    };
 
-  # NTSync (mainlined in Linux 6.14; the default 26.05 kernel is 6.18) is required
-  # by the patched Wine that shibco/ableton-linux ships.
-  boot.kernelModules = [ "ntsync" ];
+    # Realtime scheduling limits for the audio group (rtkit is enabled in
+    # desktop.nix; the user is in the `audio` group via the host config).
+    security.pam.loginLimits = [
+      {
+        domain = "@audio";
+        type = "-";
+        item = "memlock";
+        value = "unlimited";
+      }
+      {
+        domain = "@audio";
+        type = "-";
+        item = "rtprio";
+        value = "99";
+      }
+      {
+        domain = "@audio";
+        type = "-";
+        item = "nice";
+        value = "-19";
+      }
+    ];
 
-  # Note: performance CPU governor helps latency but is left to TLP on this
-  # laptop (see laptop.nix) to preserve battery — switch it per-session if needed.
+    # Threaded IRQs reduce audio latency/xruns.
+    boot.kernelParams = [ "threadirqs" ];
 
-  # The Ableton Live + Push runtime (patched Wine + PipeASIO + Link daemon),
-  # plus the prefix+install wrapper defined above.
-  environment.systemPackages = [
-    abletonPkgs.default
-    abletonInstall
-  ];
+    # NTSync (mainlined in Linux 6.14; the default 26.05 kernel is 6.18) is required
+    # by the patched Wine that shibco/ableton-linux ships.
+    boot.kernelModules = [ "ntsync" ];
 
-  # There is deliberately NO systemd unit installing this automatically.
-  #
-  # It was tried and it cannot work. setup-prefix.sh must stop the Wine
-  # processes it spawned before swapping the finished prefix into place, and it
-  # refuses to do that unasked (lib/lifecycle.sh):
-  #
-  #     if [ ! -t 0 ]; then
-  #         echo "!! Wine is running. Run the installer in a terminal so it can
-  #               ask before stopping Wine." >&2
-  #         return 1
-  #
-  # With no tty it never even reaches the question, so the service failed about
-  # six minutes in, every time, after unpacking 3.3 GB.
-  #
-  # No env var bypasses it: lifecycle.sh honours only ABLETON_{DATA_HOME,
-  # LEFTOVER_AGENTS,SESSION_LABEL,STATE_HOME,WINEPREFIX,WINE_ROOT}. Faking a pty
-  # and feeding a canned "y" is the obvious next move and is a trap — the script
-  # asks two questions with different valid letters (q_stop_wine takes y/n,
-  # q_overwrite takes o/k/a), so a stream of "y" answers the first and then
-  # loops forever on the second until the timeout.
-  #
-  # So this stays `ableton-install`, run from a terminal. That is what upstream
-  # supports, and the gate is there for a good reason: it is asking permission
-  # to kill a Wine process that might be a running Live session.
+    # Note: performance CPU governor helps latency but is left to TLP on this
+    # laptop (see laptop.nix) to preserve battery — switch it per-session if needed.
+
+    # The Ableton Live + Push runtime (patched Wine + PipeASIO + Link daemon),
+    # plus the prefix+install wrapper defined above.
+    environment.systemPackages = [
+      abletonPkgs.default
+      abletonInstall
+    ];
+
+    # There is deliberately NO systemd unit installing this automatically.
+    #
+    # It was tried and it cannot work. setup-prefix.sh must stop the Wine
+    # processes it spawned before swapping the finished prefix into place, and it
+    # refuses to do that unasked (lib/lifecycle.sh):
+    #
+    #     if [ ! -t 0 ]; then
+    #         echo "!! Wine is running. Run the installer in a terminal so it can
+    #               ask before stopping Wine." >&2
+    #         return 1
+    #
+    # With no tty it never even reaches the question, so the service failed about
+    # six minutes in, every time, after unpacking 3.3 GB.
+    #
+    # No env var bypasses it: lifecycle.sh honours only ABLETON_{DATA_HOME,
+    # LEFTOVER_AGENTS,SESSION_LABEL,STATE_HOME,WINEPREFIX,WINE_ROOT}. Faking a pty
+    # and feeding a canned "y" is the obvious next move and is a trap — the script
+    # asks two questions with different valid letters (q_stop_wine takes y/n,
+    # q_overwrite takes o/k/a), so a stream of "y" answers the first and then
+    # loops forever on the second until the timeout.
+    #
+    # So this stays `ableton-install`, run from a terminal. That is what upstream
+    # supports, and the gate is there for a good reason: it is asking permission
+    # to kill a Wine process that might be a running Live session.
+  };
 }

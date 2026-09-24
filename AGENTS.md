@@ -91,6 +91,10 @@ modules/home/                 home-manager modules: shell, cli, terminal, editor
                               browsers, office, proton, media, comms, git, dev, hyprland
 home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
+docs/                         Workflows a human follows, not module rationale
+                              (INSTALL.md, ABLETON.md). A module comment explains
+                              why a line of Nix exists; a doc explains what to do
+                              on a new machine. Link the doc from the module.
 ```
 
 `flake.nix` exposes a `mkHost` helper that wires home-manager + sops-nix + stylix

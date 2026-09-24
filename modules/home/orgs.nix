@@ -4,9 +4,10 @@
 # and lives in home/<user>/default.nix, the same way my.calendars does.
 #
 # It exists because several unrelated things need the same answer to "which org
-# is this?" and were each about to invent their own: commit identity
-# (modules/home/git.nix), and — when they land — the Claude Code account a
-# terminal should use, and which workspaces an org's apps open on.
+# is this?" and would otherwise each invent their own: commit identity
+# (modules/home/git.nix), the Claude Code account and MCP servers a terminal
+# gets (modules/home/claude-code-profiles.nix), and which workspace the org's
+# apps open on (modules/home/org.nix).
 #
 # The boundary is a DIRECTORY, not a mode you switch into. Mode-switching setups
 # fail the same way every time: you forget which mode you are in, and find out
@@ -61,6 +62,35 @@
               description = ''
                 Root of this org's checkouts. Everything beneath it is treated
                 as belonging to the org, via git's `includeIf gitdir:`.
+              '';
+            };
+
+            workspace = lib.mkOption {
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              example = 2;
+              description = ''
+                Hyprland workspace this org owns. The workspace is created at
+                startup and named after the org, so the bar says which org you
+                are looking at rather than a number.
+
+                Null keeps the org off the workspace layout entirely: it still
+                gets a commit identity and a directory, it just has no screen of
+                its own and does not appear in the `org` launcher.
+              '';
+            };
+
+            apps = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              example = lib.literalExpression ''[ "chromium --profile-directory=Acme" ]'';
+              description = ''
+                Extra commands `org <name>` starts on the org's workspace,
+                alongside the terminal it always opens in `directory`.
+
+                They run only when the workspace is empty, so running `org`
+                again to switch back to a running org does not pile up a second
+                copy of everything.
               '';
             };
           };

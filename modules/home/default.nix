@@ -12,6 +12,7 @@
     ./media.nix
     ./comms.nix
     ./orgs.nix
+    ./org.nix
     ./git.nix
     ./git-hooks.nix
     ./security.nix

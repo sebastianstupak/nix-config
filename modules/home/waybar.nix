@@ -680,9 +680,13 @@ in
         # single boolean class, and neither ghostty nor Hyprland surfaces
         # per-surface state to an external process.
 
-        # Always show 1-5 even when empty, so the bar doesn't reflow every time
-        # a workspace empties out. 6-9 (bound in hyprland.nix) appear on demand.
-        persistent-workspaces."*" = 5;
+        # Only workspace 1 is a placeholder here. The org workspaces (2-5) are
+        # made persistent by Hyprland itself in modules/home/org.nix, so they
+        # already exist when the bar starts and need no placeholder — and a
+        # placeholder would actively hurt: measured, with `"*" = 5` the numeric
+        # placeholder wins over the real workspace and every org renders as a
+        # bare number instead of its name. 6-9 appear on demand as before.
+        persistent-workspaces."*" = 1;
       };
 
       # Now playing. Native module (waybar links libplayerctl), so this is the

@@ -154,15 +154,32 @@
   # If an org ever needs its own address (a GitHub org that enforces a verified
   # company domain, a CLA that checks the author), change that one line; nothing
   # else moves.
+  #
+  # Each also owns a workspace, named after the org in the bar. 1 is left
+  # unclaimed on purpose: it is where you land at login and where anything that
+  # belongs to no org goes — this config, a scratch shell, a browser you opened
+  # to look something up. $mod+O picks an org; see modules/home/org.nix.
   my.orgs =
     let
       me = "sebastian.stupak@pm.me";
     in
     {
-      personal.email = me;
-      datadir.email = me;
-      hettify.email = me;
-      bunny.email = me;
+      datadir = {
+        email = me;
+        workspace = 2;
+      };
+      hettify = {
+        email = me;
+        workspace = 3;
+      };
+      bunny = {
+        email = me;
+        workspace = 4;
+      };
+      personal = {
+        email = me;
+        workspace = 5;
+      };
     };
 
   # Per-user git identity (shared git config lives in modules/home/git.nix).

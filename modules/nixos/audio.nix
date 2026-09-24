@@ -19,7 +19,29 @@
 # Run the command once with the directory empty and it tells you exactly that.
 #
 # Authorising Live (offline, with your licence) stays manual for the same
-# reason. Windows VSTs install into the same prefix.
+# reason: `ableton-live <file>.auz` applies the response file — the launcher
+# detects the extension and hands it to Live rather than opening it as a set.
+#
+# PLUGINS. They must be WINDOWS VSTs. Live here is a Windows binary under Wine,
+# so a Linux-native .so VST3 cannot load into it no matter where it is put —
+# which is the counterintuitive part on a Linux machine, and the easiest way to
+# waste an evening. Get the Windows build of the plugin.
+#
+#   installer-based:  ableton-wine ~/proprietary/SomePlugin-Setup.exe
+#   drag-and-drop:    copy the .vst3 into
+#                     ~/.wine-ableton/drive_c/Program Files/Common Files/VST3
+#                     (VST2 .dll -> .../Program Files/VstPlugins)
+#
+# `ableton-wine` is plain wine bound to this prefix, so any Windows installer
+# runs through it. Then in Live: Preferences > Plug-Ins, enable the VST3/VST2
+# system folders and Rescan.
+#
+# Keep the installers in ~/proprietary beside the Live zip. They are licensed
+# artifacts that cannot live in the store or in git, and grouping them means a
+# rebuild-from-scratch has one directory to restore rather than a hunt.
+#
+# Copy-protected plugins (iLok, eLicenser and friends) are the usual thing that
+# does not survive Wine — expect those to be the exception rather than the rule.
 #
 # See the project README for plugin/DRM caveats.
 { inputs, pkgs, ... }:

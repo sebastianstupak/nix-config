@@ -107,11 +107,15 @@ the line. Delete the prefix, rebuild it, and the plugins are still there.
    Without this Live uses a default backend and none of the low-latency work
    above is doing anything.
 
-`ableton-install` must run from a terminal. It stops the Wine processes it
-spawned before swapping the finished prefix into place, and refuses to do that
-without a tty — it is asking permission to kill what might be a running Live
-session. There is no environment variable to bypass it, and feeding a canned
-answer does not work either: it asks two questions with different valid letters.
+Run `ableton-install` from a terminal. Building the prefix has to stop any Wine
+process using this runtime first, and it asks before doing so rather than
+killing what might be an open Live session — with no tty it refuses instead of
+asking. On a genuinely fresh machine nothing is running and it will not ask, but
+the requirement is unconditional in the code, so make it a habit. There is no
+environment variable to bypass it, and feeding a canned answer does not work
+either: it asks two questions with different valid letters.
+
+Close Live before re-running it.
 
 It logs to `$XDG_STATE_HOME/ableton-install.log` on every run. Read that first
 when something fails; upstream's own logging is off by default, so without this
@@ -146,21 +150,18 @@ config changes that; worth knowing before buying rather than after.
 
 ## Known rough edges
 
-**The scripted Live install fails.** `ableton-install` installs Live through
-upstream's staging transaction, which has to stop Wine before promoting the
-prefix — the same tty gate as above, but reached mid-run. On this machine it
-failed roughly six minutes in, every time, after unpacking 3.3 GB, and rolled
-back. The workaround was installing Live directly into the prefix:
+**Live is installed outside upstream's staging transaction, on purpose.**
+`setup-prefix` can install Live itself, but only inside a transaction whose
+commit has to stop the Wine processes the install spawned — and it refuses to do
+that without a tty even when one is present for its own prompts. Measured here:
+it failed about six minutes in, every time, after unpacking 3.3 GB, and rolled
+the whole prefix back.
 
-```bash
-cd ~/.cache/ableton-wine-setup/live-installer
-WINEPREFIX=$HOME/.wine-ableton ableton-wine \
-  "./Ableton Live 12 Standard Installer.exe" \
-  /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
-```
-
-That bypasses the transaction and works. It is not yet wired into
-`ableton-install`, so a genuinely fresh machine still needs this step by hand.
+So `ableton-install` builds the prefix *without* Live (which commits cleanly,
+having no installer processes to stop) and then runs the installer directly into
+the committed prefix, with the same engine detection and silent flags upstream
+would have used. If that ever fails, it keeps the unpacked installer and points
+at the log so a retry costs nothing.
 
 **Keyboard input appears dead right after launch.** Live's splash window can
 hold focus. Click the main window. Verified working afterwards: X input focus

@@ -34,6 +34,9 @@ let
   # one is the exact revision this system was built against, and works offline.
   setupPrefix = "${abletonPkgs.ableton-wine}/share/ableton-wine/scripts/setup-prefix.sh";
 
+  # wine bound to the Ableton prefix (it exports WINEPREFIX itself).
+  abletonWine = "${abletonPkgs.ableton-wine}/bin/ableton-wine";
+
   # One command for "make the prefix and put Live in it".
   #
   # setup-prefix already knows how to install Live, but only opts in when
@@ -103,10 +106,19 @@ let
         exit 1
       fi
 
-      # Deliberately NOT setting ABLETON_LIVE_VERSION. Pinning a major makes
-      # setup-prefix skip autoinstall altogether — it then only accepts an
-      # exactly-matching installer rather than installing the newest found.
-      export ABLETON_LIVE_AUTOINSTALL=1
+      # ABLETON_LIVE_AUTOINSTALL is deliberately NOT set, which is the whole
+      # point of this wrapper.
+      #
+      # With it on, setup-prefix installs Live inside its staging transaction,
+      # and promoting that prefix requires stopping the Wine processes the
+      # install spawned — which it refuses to do without a tty even when it has
+      # one for its own prompts. Measured here: it failed ~6 minutes in, every
+      # single time, after unpacking 3.3 GB, and rolled the whole prefix back.
+      #
+      # Building the prefix WITHOUT Live commits cleanly (no installer processes
+      # to stop), so Live is installed afterwards, directly into the committed
+      # prefix. Same installer, same flags upstream would have used, just
+      # outside a transaction that cannot close over it.
       export ABLETON_INSTALLER_DIR="$dir"
 
       # Always leave a log. Upstream's is opt-in via ABLETON_INSTALLER_LOG and
@@ -119,10 +131,65 @@ let
       export ABLETON_INSTALLER_LOG="''${ABLETON_INSTALLER_LOG:-$XDG_STATE_HOME/ableton-install.log}"
       printf 'log: %s\n' "$ABLETON_INSTALLER_LOG"
 
-      # Not exec: the prefix has to exist before the VST3 link can be made.
+      # Not exec: Live and the VST3 link both come after the prefix exists.
       ${setupPrefix} "$@"
       rc=$?
       [ "$rc" -eq 0 ] || exit "$rc"
+
+      prefix="''${ABLETON_WINEPREFIX:-$HOME/.wine-ableton}"
+      live_installed() {
+        ls "$prefix"/drive_c/ProgramData/Ableton/*/Program/"Ableton Live"*.exe \
+          >/dev/null 2>&1
+      }
+
+      if ! live_installed; then
+        # Newest by the version in the filename, matching how setup-prefix picks
+        # among several: the edition sorts before the version otherwise, so a
+        # plain sort ranks "trial 11" above "suite 12".
+        zip="$(find "$dir" -maxdepth 1 -type f -iname 'ableton_live*.zip' -print \
+          | awk '{ n = $0; sub(/.*\//, "", n)
+                   print (match(n, /[0-9]+(\.[0-9]+)+/) ? substr(n, RSTART, RLENGTH) : "0") "\t" $0 }' \
+          | sort -V | tail -n 1 | cut -f2-)"
+
+        unpack="''${XDG_CACHE_HOME:-$HOME/.cache}/ableton-wine-setup/live-installer"
+        mkdir -p "$unpack"
+        printf 'unpacking %s\n' "$(basename "$zip")"
+        unzip -o -q "$zip" -d "$unpack"
+
+        exe="$(find "$unpack" -maxdepth 1 -type f -iname '*Installer*.exe' -print -quit)"
+        [ -n "$exe" ] || { printf '!! no installer .exe inside %s\n' "$zip" >&2; exit 1; }
+
+        # Two engines ship under the same name and neither acts on the other's
+        # switches; the wixburn marker in the header is how upstream tells them
+        # apart.
+        if head -c 4096 -- "$exe" | grep -qaF '.wixburn'; then
+          flags=(/passive /norestart)
+        else
+          flags=(/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-)
+        fi
+
+        # From the installer's own directory: its payload lookups for
+        # Installer-N.bin are relative, and 5 GB of .bin sits beside the .exe.
+        #
+        # The display must stay attached. Upstream's note is explicit that these
+        # engines need a window connection even when told to be silent — a
+        # headless run installs nothing at all and still exits 0.
+        printf 'installing Live (several minutes)\n'
+        ( cd "$(dirname -- "$exe")" \
+          && timeout "''${ABLETON_LIVE_INSTALL_TIMEOUT:-3600}" \
+             ${abletonWine} "./$(basename -- "$exe")" "''${flags[@]}" ) || true
+
+        if ! live_installed; then
+          printf '!! Live did not install. See %s\n' "$ABLETON_INSTALLER_LOG" >&2
+          printf '!! The unpacked installer was kept at %s for a retry.\n' "$unpack" >&2
+          exit 1
+        fi
+
+        # ~5 GB of extracted payload, and the zip it came from is still in the
+        # slice, so this is pure duplication once the install succeeded.
+        rm -rf "$unpack"
+        printf 'Live installed\n'
+      fi
 
       # Point the prefix's VST3 folder at the slice, so plugins stop being
       # prefix state. The prefix is 14 GB of regenerable churn that should never

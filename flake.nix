@@ -226,6 +226,74 @@
               timeout 30 git commit -q -F m || fail "self-delegation recursed or failed"
               echo "  ok: self-delegation guard holds"
 
+              # --- 8. the rest of the vendor list, and the giveaway phrases ---
+              for bad in \
+                "feat: port to the openai sdk" \
+                "fix: apply the copilot suggestion" \
+                "docs: ai-generated reference notes" \
+                "chore: changelog written by an AI"
+              do
+                fresh
+                printf '%s\n' "$bad" > m
+                if git commit -q -F m 2>/dev/null; then fail "should have been rejected: $bad"; fi
+              done
+              echo "  ok: openai / copilot / ai-generated / written-by-an-AI rejected"
+
+              # --- 9. words that must NOT trip it ---
+              # This hook runs in every repo on the machine, so a false positive
+              # blocks unrelated work. These three are the ones deliberately left
+              # out of the vendor list; if someone adds them, this fails.
+              for good in \
+                "fix(ui): restore the cursor position after a reflow" \
+                "feat(net): add a gemini protocol client" \
+                "refactor: rename the llm helper module"
+              do
+                fresh
+                printf '%s\n' "$good" > m
+                git commit -q -F m || fail "false positive on: $good"
+              done
+              echo "  ok: cursor / gemini / llm are not false positives"
+
+              # --- 10. this repo's own hook agrees with the global policy ---
+              # .githooks/commit-msg shadows the global hook inside this repo
+              # (core.hooksPath), so it carries its own copy of the word list.
+              # Two copies drift. Run both against the same messages and require
+              # the same verdict.
+              #
+              # Scope is the MENTION rule only. The two differ on attribution
+              # trailers by design: the global policy strips them and lets the
+              # commit through, the repo hook refuses — a hook that rewrites what
+              # you wrote is worth having in exactly one place.
+              rm -rf "$TMPDIR/p"; mkdir -p "$TMPDIR/p"
+              cp -r ${self}/.githooks "$TMPDIR/p/.githooks"
+              cp -r ${self}/scripts "$TMPDIR/p/scripts"
+              chmod -R u+w "$TMPDIR/p"
+              cd "$TMPDIR/p"
+              git init -q .
+
+              verdict() { # <hook> <message>; prints pass|reject
+                printf '%s\n' "$2" > msg
+                if bash "$1" msg > /dev/null 2>&1; then echo pass; else echo reject; fi
+              }
+
+              for msg in \
+                "feat: port to the openai sdk" \
+                "fix: apply the copilot suggestion" \
+                "chore: bump the anthropic client" \
+                "docs: ai-generated reference notes" \
+                "feat: ask claude about it" \
+                "fix(ui): restore the cursor position after a reflow" \
+                "feat(net): add a gemini protocol client" \
+                "refactor(core): split the parser"
+              do
+                g="$(verdict "$TMPDIR/globalhooks/commit-msg" "$msg")"
+                r="$(verdict "$TMPDIR/p/.githooks/commit-msg" "$msg")"
+                if [ "$g" != "$r" ]; then
+                  fail "hooks disagree on '$msg': global=$g repo=$r"
+                fi
+              done
+              echo "  ok: repo hook and global policy agree on every mention"
+
               echo "all git-hook policy tests passed"
               touch $out
             '';

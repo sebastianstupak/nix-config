@@ -5,6 +5,16 @@
   pkgs,
   ...
 }:
+let
+  # Every identity one key signs for: the global one plus each org that has
+  # declared an address. Deduplicated, because an org may legitimately reuse it.
+  emails = lib.unique (
+    [ config.programs.git.settings.user.email ]
+    ++ (lib.mapAttrsToList (_: org: org.email) (
+      lib.filterAttrs (_: org: org.email != null) config.my.orgs
+    ))
+  );
+in
 {
   programs.git = {
     enable = true;
@@ -51,17 +61,43 @@
     };
   };
 
+  # Per-org commit identity, keyed on where the repo lives.
+  #
+  # Without this every commit in every repo is authored by the global address,
+  # which on this machine meant work repos signed as a personal identity. The
+  # boundary is the DIRECTORY rather than a mode you switch into, because the
+  # failure of mode-switching is always the same: you forget which mode you are
+  # in and only find out after pushing.
+  #
+  # Only orgs that declare an email get an override; the rest fall through to
+  # the global identity. That way an org can be listed before its address is
+  # known without silently attributing commits to the wrong person.
+  programs.git.includes = lib.mapAttrsToList (_: org: {
+    condition = "gitdir:${org.directory}/";
+    contents.user = {
+      inherit (org) email;
+      inherit (config.programs.git.settings.user) name;
+    };
+  }) (lib.filterAttrs (_: org: org.email != null) config.my.orgs);
+
   # allowed_signers maps an identity to the key trusted to sign for it, in the
   # form "<email> <keytype> <keydata>". Written at activation rather than as a
   # home.file because it needs the public key's contents, which live outside the
   # store — and committing the key material here just to generate it would tie
   # the repo to one machine's key.
+  #
+  # Every org address needs its own line. One key signs for all of them, but
+  # verification is per-identity: an org email missing here makes git report its
+  # own commits as signed by an unknown signer.
   home.activation.gitAllowedSigners = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     key="$HOME/.ssh/id_ed25519.pub"
     dest="${config.xdg.configHome}/git/allowed_signers"
     if [ -r "$key" ]; then
       mkdir -p "$(dirname "$dest")"
-      printf '%s %s\n' "${config.programs.git.settings.user.email}" "$(cat "$key")" > "$dest"
+      : > "$dest"
+      ${lib.concatMapStringsSep "\n" (email: ''
+        printf '%s %s\n' ${lib.escapeShellArg email} "$(cat "$key")" >> "$dest"
+      '') emails}
     fi
   '';
 }

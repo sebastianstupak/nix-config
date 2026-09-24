@@ -11,6 +11,7 @@
     ./proton.nix
     ./media.nix
     ./comms.nix
+    ./orgs.nix
     ./git.nix
     ./git-hooks.nix
     ./security.nix

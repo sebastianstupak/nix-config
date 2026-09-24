@@ -95,11 +95,15 @@ let
       abletonPkgs.default # wine, wineboot, wineserver
     ];
     text = ''
-      # Lowercase, unlike upstream's $HOME/Proprietary default — nothing else in
-      # this home directory is capitalised, and the whole point of exporting
-      # ABLETON_INSTALLER_DIR below is that the location is ours to choose.
-      dir="''${ABLETON_INSTALLER_DIR:-$HOME/proprietary}"
-      mkdir -p "$dir"
+      # ~/proprietary is the restore unit: licensed artifacts that cannot live in
+      # git or the Nix store, but that a fresh machine genuinely needs. Sliced
+      # per product so it stays navigable when something other than Ableton
+      # lands there. Lowercase, unlike upstream's $HOME/Proprietary — nothing
+      # else in this home directory is capitalised, and exporting
+      # ABLETON_INSTALLER_DIR is precisely what makes the location ours to pick.
+      slice="''${ABLETON_SLICE_DIR:-$HOME/proprietary/ableton}"
+      dir="''${ABLETON_INSTALLER_DIR:-$slice}"
+      mkdir -p "$dir" "$slice/vst3" "$slice/installers"
 
       if [ -z "$(find "$dir" -maxdepth 1 -type f -iname 'ableton_live*.zip' -print -quit)" ]; then
         cat >&2 <<MSG
@@ -135,7 +139,37 @@ let
       export ABLETON_INSTALLER_LOG="''${ABLETON_INSTALLER_LOG:-$XDG_STATE_HOME/ableton-install.log}"
       printf 'log: %s\n' "$ABLETON_INSTALLER_LOG"
 
-      exec ${setupPrefix} "$@"
+      # Not exec: the prefix has to exist before the VST3 link can be made.
+      ${setupPrefix} "$@"
+      rc=$?
+      [ "$rc" -eq 0 ] || exit "$rc"
+
+      # Point the prefix's VST3 folder at the slice, so plugins stop being
+      # prefix state. The prefix is 14 GB of regenerable churn that should never
+      # be backed up; the plugins in it are neither. With this link you can
+      # delete the prefix, rebuild it, and the plugins are still there — and
+      # they ride along in the ~/proprietary backup for free.
+      #
+      # Verified against Wine rather than assumed: `winepath -u 'C:\Program
+      # Files\Common Files\VST3'` resolves through the symlink to the slice, so
+      # Live's scan of the Windows path reads the real directory.
+      #
+      # These are WINDOWS VST3s — only loadable by a Windows host in this
+      # prefix, which is why they belong to the Ableton slice rather than beside
+      # it, even though VST3 is a cross-DAW format in general.
+      vst3_win="$HOME/.wine-ableton/drive_c/Program Files/Common Files/VST3"
+      if [ ! -L "$vst3_win" ]; then
+        # An existing real directory is only safe to replace when empty —
+        # anything in it was installed there and would vanish from Live.
+        if [ -d "$vst3_win" ] && [ -n "$(ls -A "$vst3_win" 2>/dev/null)" ]; then
+          printf 'note: %s has plugins in it; move them to %s and re-run to link it\n' \
+            "$vst3_win" "$slice/vst3" >&2
+        else
+          rmdir "$vst3_win" 2>/dev/null || true
+          mkdir -p "$(dirname "$vst3_win")"
+          ln -sfn "$slice/vst3" "$vst3_win"
+        fi
+      fi
     '';
   };
 in

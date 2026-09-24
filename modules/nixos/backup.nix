@@ -97,6 +97,19 @@ in
         "**/.venv"
         "**/result" # nix build symlinks -> /nix/store
         "**/*.qcow2" # VM images: huge, and churn on every boot
+
+        # The Ableton wineprefix: 14 GB, entirely regenerable by
+        # `ableton-install` from the zip in ~/proprietary, and it churns — Live
+        # writes analytics.db, crash logs and caches inside it, so restic would
+        # push new blobs on every run forever.
+        #
+        # This exclusion is the reproducibility boundary, not just a size
+        # tweak: ~/proprietary holds the licensed artifacts a new machine
+        # actually needs and stays backed up, while everything derived from
+        # them does not. Plugins live in the slice and are symlinked into the
+        # prefix (see modules/nixos/audio.nix) precisely so that they fall on
+        # the backed-up side of this line.
+        "/home/*/.wine-ableton"
       ];
 
       timerConfig = {

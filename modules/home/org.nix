@@ -1,7 +1,8 @@
 # An org's workspaces, and the `org` command that lands you on them.
 #
 # The org list itself lives in home/<user>/default.nix; this module is what
-# turns an entry with a `workspace` into a place you can actually go.
+# turns an entry with workspaces into a place you can actually go. Using it from
+# day to day, and reading the bar: docs/ORGS.md.
 #
 # An org owns one or more workspaces. The first is its home: `org <name>`
 # switches there and — unless its terminal is already sitting there — starts one
@@ -71,10 +72,6 @@ let
     ]
     ++ org.apps;
 
-  # The org's home workspace: where `org <name>` lands and where its terminal
-  # starts. The rest are the same org's other screens.
-  homeWorkspaceOf = org: builtins.head org.workspaces;
-
   # Hyprland workspace names must be unique, so only the first carries the bare
   # org name and the rest are suffixed. The bar keys its icons off exactly these
   # strings, which is why this is one function rather than two conventions that
@@ -99,7 +96,7 @@ let
     { name, org }:
     ''
       ${lib.escapeShellArg name})
-        ws=${toString (homeWorkspaceOf org)}
+        screens=(${lib.concatMapStringsSep " " toString org.workspaces})
         dir=${lib.escapeShellArg org.directory}
         apps=(${lib.concatMapStringsSep " " lib.escapeShellArg (commandsFor name org)})
         ;;
@@ -121,11 +118,18 @@ let
         cat <<'EOF'
       Usage: org [NAME]
 
-      Switch to an org's workspace, starting its terminal and apps unless the
-      terminal is already there. With no NAME, pick one from a menu.
+      Switch to an org's screen. With no NAME, pick one from a menu.
+
+      SCREEN selects which of the org's workspaces, 1-based, default 1. Screen 1
+      is the org's home: it gets a terminal attached to the org's session,
+      started if it is not already there. The others are just switched to.
 
         -l, --list   print the known org names
         -h, --help   show this
+
+      Examples:
+        org datadir      the org's home screen, with its terminal
+        org datadir 2    the org's second screen
       EOF
       }
 
@@ -135,6 +139,15 @@ let
       esac
 
       target="''${1:-}"
+      screen="''${2:-1}"
+
+      case "$screen" in
+        "" | *[!0-9]*)
+          printf 'org: screen must be a number, got %s\n' "$screen" >&2
+          exit 1
+          ;;
+      esac
+
       if [ -z "$target" ]; then
         # `|| true`: fuzzel exits non-zero when dismissed with Escape, which is
         # a decision not to switch, not a failure.
@@ -142,7 +155,7 @@ let
         [ -n "$target" ] || exit 0
       fi
 
-      ws=""
+      screens=()
       dir=""
       apps=()
 
@@ -155,7 +168,21 @@ let
           ;;
       esac
 
+      if [ "$screen" -lt 1 ] || [ "$screen" -gt "''${#screens[@]}" ]; then
+        printf 'org: %s has %d screen(s), asked for %s\n' "$target" "''${#screens[@]}" "$screen" >&2
+        exit 1
+      fi
+      ws="''${screens[$((screen - 1))]}"
+
       hyprctl dispatch workspace "$ws" > /dev/null
+
+      # Only the org's HOME screen gets a terminal. The others are deliberately
+      # left bare: they exist so one org's work can be spread across two
+      # screens, and what belongs on the second one is not something this can
+      # guess. `org <name> 2` is "take me there", nothing more.
+      if [ "$screen" -ne 1 ]; then
+        exit 0
+      fi
 
       # Is this org already set up here? The test is "does the workspace have
       # one of our terminals", not "is the workspace empty".

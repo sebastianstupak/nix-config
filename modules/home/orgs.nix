@@ -9,6 +9,10 @@
 # gets (modules/home/claude-code-profiles.nix), and which workspace the org's
 # apps open on (modules/home/org.nix).
 #
+# What an org gets, how to add one, and what still has to be done by hand on a
+# new machine: docs/ORGS.md. This file is the option contract; that is the
+# workflow.
+#
 # The boundary is a DIRECTORY, not a mode you switch into. Mode-switching setups
 # fail the same way every time: you forget which mode you are in, and find out
 # after pushing a commit authored by the wrong identity. A path cannot be
@@ -144,12 +148,14 @@
               default = [ ];
               example = lib.literalExpression ''[ "chromium --profile-directory=Acme" ]'';
               description = ''
-                Extra commands `org <name>` starts on the org's workspace,
-                alongside the terminal it always opens in `directory`.
+                Extra commands `org <name>` starts on the org's HOME workspace,
+                alongside the terminal it opens there in `directory`.
 
-                They run only when the workspace is empty, so running `org`
-                again to switch back to a running org does not pile up a second
-                copy of everything.
+                They run only when that workspace has none of our terminals on
+                it yet, so running `org` again to switch back to a running org
+                does not pile up a second copy of everything. A window that
+                belongs to something else — a browser you opened there — does
+                not count, and does not stop the org being set up.
               '';
             };
           };

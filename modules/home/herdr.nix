@@ -6,6 +6,8 @@
 # attaching again picks them up where they were. That is the whole reason it is
 # here: an agent mid-task survives closing the window.
 #
+# Closing, reattaching and ending sessions from day to day: docs/ORGS.md.
+#
 # It already supports named sessions (`herdr --session <name>`), so separating
 # the orgs needs no invention: each org gets a session named after it. What this
 # module adds is not having to remember that. Running plain `herdr` anywhere

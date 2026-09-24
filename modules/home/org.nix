@@ -3,9 +3,9 @@
 # The org list itself lives in home/<user>/default.nix; this module is what
 # turns an entry with a `workspace` into a place you can actually go.
 #
-# `org <name>` switches to that org's workspace and — only if nothing is open
-# there — starts a terminal in the org's directory plus whatever `apps` it
-# declares. Everything downstream of the directory then agrees without being
+# `org <name>` switches to that org's workspace and — unless its terminal is
+# already sitting there — starts one in the org's directory, plus whatever
+# `apps` it declares. Everything downstream of the directory then agrees without being
 # told: git picks the org's commit identity (modules/home/git.nix), `claude`
 # picks the org's account and MCP servers (modules/home/claude-code-profiles.nix).
 # Starting the terminal somewhere else and cd-ing in works just as well; the
@@ -37,6 +37,14 @@ let
   # terminal from the one $mod+Return does.
   terminal = "${config.programs.ghostty.package}/bin/ghostty";
 
+  # Wayland app-id of the terminal above, used to recognise a window the
+  # launcher itself started. It is compiled into the terminal, so there is
+  # nothing in the package to derive it from — but the package does declare it
+  # as StartupWMClass, and the `org-terminal-class` flake check asserts the two
+  # still agree. If the terminal ever renames its app-id, that check fails
+  # rather than the launcher quietly opening a second window every time.
+  terminalClass = "com.mitchellh.ghostty";
+
   commandsFor = org: [ "${terminal} --working-directory=${org.directory}" ] ++ org.apps;
 
   # One `case` arm per org. Each command is quoted as a single word, so an app
@@ -67,8 +75,8 @@ let
         cat <<'EOF'
       Usage: org [NAME]
 
-      Switch to an org's workspace, starting its apps if nothing is open there
-      yet. With no NAME, pick one from a menu.
+      Switch to an org's workspace, starting its terminal and apps unless the
+      terminal is already there. With no NAME, pick one from a menu.
 
         -l, --list   print the known org names
         -h, --help   show this
@@ -103,12 +111,27 @@ let
 
       hyprctl dispatch workspace "$ws" > /dev/null
 
-      # Start the apps only on an empty workspace, so `org datadir` is safe to
-      # run repeatedly — the second time it is purely "take me there".
-      # `add // 0` because a workspace that has never been used is absent from
-      # the list entirely rather than present with zero windows.
-      open=$(hyprctl workspaces -j | jq --argjson id "$ws" '[.[] | select(.id == $id) | .windows] | add // 0')
-      if [ "$open" -eq 0 ]; then
+      # Is this org already set up here? The test is "does the workspace have
+      # one of our terminals", not "is the workspace empty".
+      #
+      # Empty was the obvious rule and it is wrong: any window that happens to
+      # be sitting on the org's workspace — a browser you opened to look
+      # something up — stops `org` from ever opening the org's terminal, and it
+      # fails silently, because switching to the workspace is the visible part.
+      # Caught by testing it against a workspace that already had a browser on
+      # it.
+      #
+      # Matching on the terminal's own window is the honest test, and it keeps
+      # `org <name>` safe to run repeatedly: the second time it is purely "take
+      # me there". Matched on initialClass, which a window keeps for life,
+      # rather than class, which it does not.
+      #
+      # Process cwd would be a more precise signal and does not work: ghostty
+      # passes the directory to the shell it starts and stays in $HOME itself,
+      # so every terminal on the machine looks identical from /proc.
+      mine=$(hyprctl clients -j | jq --argjson id "$ws" --arg cls ${lib.escapeShellArg terminalClass} \
+        '[.[] | select(.workspace.id == $id and .initialClass == $cls)] | length')
+      if [ "$mine" -eq 0 ]; then
         # The directory is created at activation, but a deleted one would make
         # the terminal start somewhere unexpected — and the whole point of the
         # workspace is which directory it starts in.
@@ -126,8 +149,29 @@ let
   };
 in
 {
+  # Shared with the `org-terminal-class` flake check rather than repeated there
+  # as a literal, so there is one place the app-id is written down.
+  options.my.orgLauncher = {
+    terminalClass = lib.mkOption {
+      internal = true;
+      type = lib.types.str;
+      description = "Wayland app-id of the terminal the launcher starts.";
+    };
+
+    terminalPackage = lib.mkOption {
+      internal = true;
+      type = lib.types.package;
+      description = "The terminal package whose app-id `terminalClass` names.";
+    };
+  };
+
   config = lib.mkMerge [
     {
+      my.orgLauncher = {
+        inherit terminalClass;
+        terminalPackage = config.programs.ghostty.package;
+      };
+
       # Every org's directory, workspace or not. git's `includeIf gitdir:` and
       # the Claude Code profile both key on these paths, and a path that does
       # not exist yet is a rule that silently does nothing.

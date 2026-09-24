@@ -120,6 +120,36 @@
           touch $out
         '';
 
+        # The org launcher recognises the windows it started by Wayland app-id,
+        # a string it cannot derive from the terminal package (it is compiled
+        # in). The package does declare the same id as StartupWMClass, so assert
+        # the two agree. If the terminal renames its app-id in some future
+        # release, this fails — instead of the launcher silently opening a
+        # second terminal on every `org <name>`.
+        org-terminal-class =
+          let
+            hm = self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak;
+          in
+          pkgs.runCommand "org-terminal-class-check"
+            {
+              nativeBuildInputs = [ pkgs.gnugrep ];
+            }
+            ''
+              cls=${nixpkgs.lib.escapeShellArg hm.my.orgLauncher.terminalClass}
+              apps="${hm.my.orgLauncher.terminalPackage}/share/applications"
+
+              test -d "$apps" || { echo "no desktop files in $apps" >&2; exit 1; }
+
+              if ! grep -rqx "StartupWMClass=$cls" "$apps"; then
+                echo "the terminal no longer declares StartupWMClass=$cls:" >&2
+                grep -rh '^StartupWMClass=' "$apps" >&2 || echo "  (none at all)" >&2
+                echo "update terminalClass in modules/home/org.nix to match." >&2
+                exit 1
+              fi
+              echo "  ok: terminal app-id is $cls"
+              touch $out
+            '';
+
         # The global commit-msg policy (modules/home/git-hooks.nix) rewrites and
         # rejects commit messages, so a regression either mangles real messages
         # or silently lets attribution through. Drive the installed hook via

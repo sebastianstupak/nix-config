@@ -63,9 +63,14 @@ directory are restored from herdr's `session.json` when you attach again.
 To end one deliberately:
 
 ```bash
-herdr session list            # what exists
-herdr session stop datadir    # end it, panes and all
+herdr session list              # what exists, and whether it is running
+herdr session stop datadir      # end it, panes and all
+herdr session delete datadir    # and forget it entirely
 ```
+
+`stop` ends the panes but leaves the session listed as `stopped`, which is what
+you want if you mean to come back to a clean one under the same name. `delete`
+is what removes the entry.
 
 ## Reading the bar
 
@@ -135,12 +140,25 @@ Everything except the secrets is reproduced by a rebuild. What is not:
    run `/mcp` once inside the profile.
 4. **herdr sessions.** These are live state, not configuration. A new machine
    starts with none, and the first `org <name>` creates one.
+5. **An ssh key, before the identity is verifiable.** `allowed_signers` is
+   written during activation from the key's contents, so activating before
+   `~/.ssh/id_ed25519` exists skips it — and git then calls your own commits
+   unknown-signer. Make the key, then rebuild once more. See step 9 of
+   [INSTALL.md](./INSTALL.md).
+
+Everything else — directories, git rules, profile directories with their MCP
+servers, workspace rules, bar glyphs — is there after the first rebuild.
+Verified by running the activation against an empty home: 35 checks, including
+that a second activation preserves a hand-edited `CLAUDE.md`, an existing login
+and a hand-added MCP server.
 
 ## Rough edges
 
 - **Session names are org names.** Renaming an org in `my.orgs` orphans its
-  herdr session rather than renaming it. `herdr session list` will show the old
-  one; `herdr session delete <old>` removes it.
+  herdr session rather than renaming it: the old name keeps its panes and the
+  new one starts empty. `herdr session list` shows both; `herdr session stop
+  <old>` then `herdr session delete <old>` clears it out. Checked, including
+  that a stopped session stays listed until it is deleted.
 - **One identity for every org right now.** All four use the same address, so
   the per-org git rules are in place but currently resolve to the same answer.
   If an org ever needs its own — a GitHub org enforcing a verified domain, a CLA

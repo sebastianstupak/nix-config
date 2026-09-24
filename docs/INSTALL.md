@@ -185,6 +185,27 @@ sudo nixos-rebuild switch --flake ~/nix-config#workstation
 sudo nixos-rebuild switch --rollback
 ```
 
+**Your commit-signing key.** Every commit this config makes is signed with
+`~/.ssh/id_ed25519`, which does not exist yet on a fresh machine. Make it, add
+it to GitHub as **both** an authentication and a *signing* key, then **rebuild
+once more**:
+
+```bash
+ssh-keygen -t ed25519 -C "you@example.com"     # no passphrase is fine; an agent holds it
+gh auth login                                   # then: gh ssh-key add ~/.ssh/id_ed25519.pub
+sudo nixos-rebuild switch --flake ~/nix-config#workstation
+```
+
+That last rebuild is the part that is easy to skip and hard to notice. Git's
+`allowed_signers` is written during activation *from the key's contents*, so an
+activation that ran before the key existed skips it silently — and git then
+reports your own commits as signed by an unknown signer. Verified: activating
+without a key writes nothing; activating again once the key is there writes it.
+
+```bash
+git -C ~/nix-config log -1 --show-signature   # want: Good "git" signature
+```
+
 **Keyboard:** US ↔ SK toggles with **Alt+Shift**. Handy Hyprland keys: `Super+Enter`
 terminal, `Super+R` launcher, `Super+Q` close, `Super+C` clipboard history,
 `Super+Shift+S` snipping tool, `Super+Shift+X` power menu, `Super+L` lock.

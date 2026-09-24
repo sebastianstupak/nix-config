@@ -46,7 +46,21 @@ let
   # rather than the launcher quietly opening a second window every time.
   terminalClass = "com.mitchellh.ghostty";
 
-  commandsFor = org: [ "${terminal} --working-directory=${org.directory}" ] ++ org.apps;
+  # The org's terminal opens straight into that org's herdr session, so the
+  # panes and agents from last time are already there. `-e` is ghostty's "run
+  # this instead of a shell"; the wrapper would pick the same session from the
+  # directory anyway, but naming it here means the window cannot end up on the
+  # default session if it somehow starts outside the tree.
+  #
+  # Closing this window does not end the session: herdr's server keeps the panes
+  # running and the next `org <name>` reattaches to them. See
+  # modules/home/herdr.nix.
+  commandsFor =
+    name: org:
+    [
+      "${terminal} --working-directory=${org.directory} -e ${lib.getExe config.my.herdr.package} --session ${name}"
+    ]
+    ++ org.apps;
 
   # The org's home workspace: where `org <name>` lands and where its terminal
   # starts. The rest are the same org's other screens.
@@ -78,7 +92,7 @@ let
       ${lib.escapeShellArg name})
         ws=${toString (homeWorkspaceOf org)}
         dir=${lib.escapeShellArg org.directory}
-        apps=(${lib.concatMapStringsSep " " lib.escapeShellArg (commandsFor org)})
+        apps=(${lib.concatMapStringsSep " " lib.escapeShellArg (commandsFor name org)})
         ;;
     ''
   ) named;

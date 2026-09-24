@@ -38,6 +38,21 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Terminal multiplexer the org workspaces run their agents in. Upstream
+    # ships its own flake, so this is its package rather than one we maintain.
+    #
+    # Pinned to a RELEASE TAG, not a branch, unlike every other input here. This
+    # process owns live session state — panes, layouts, running agents — and a
+    # `nix flake update` that quietly moved it to a main-branch commit would
+    # restart the server under work in progress. Bumping it is a deliberate edit
+    # of the tag below, which also keeps it a standalone commit (AGENTS.md rule
+    # 4) with a changelog entry to read first.
+    #
+    # It does NOT follow our nixpkgs: it builds against its own pinned unstable
+    # with a rust-overlay toolchain, and forcing follows would break that build
+    # the same way it does for ableton-linux below.
+    herdr.url = "github:herdrdev/herdr/v0.9.1";
+
     # Ableton Live + Push on Linux (patched Wine + PipeASIO + Link). Deliberately
     # NOT following our nixpkgs — its patched Wine is built against its own pinned
     # nixos-unstable; forcing follows would break that build. See modules/nixos/audio.nix.
@@ -149,6 +164,58 @@
               echo "  ok: terminal app-id is $cls"
               touch $out
             '';
+
+        # The herdr wrapper rewrites ARGUMENTS rather than setting an
+        # environment variable, which makes it easy to break: inject --session
+        # into a subcommand and a working `herdr session list` becomes a usage
+        # error. Drive the installed wrapper with the real binary swapped for a
+        # stub that echoes its argv, so this asserts what would actually be run.
+        #
+        # Two lines are substituted: the binary, and the line that reads the
+        # working directory. The org paths are absolute and under /home, which
+        # the build sandbox cannot create, so the directory is injected rather
+        # than moved into. Everything the substitution leaves alone — the
+        # passthrough scan and the generated case arms — is the part that breaks.
+        herdr-org-sessions =
+          let
+            hm = self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak;
+            inherit (nixpkgs) lib;
+          in
+          pkgs.runCommand "herdr-org-sessions-test" { nativeBuildInputs = [ pkgs.gnused ]; } ''
+            printf '%s\n' '#!/bin/sh' 'printf herdr' 'for a in "$@"; do printf " %s" "$a"; done' 'printf "\\n"' > stub
+            chmod +x stub
+            sed -e "s|^real=.*|real=$PWD/stub|" \
+                -e 's|^here=$(pwd -P)|here="$FAKE_PWD"|' \
+                ${hm.my.herdr.package}/bin/herdr > wrapper
+            chmod +x wrapper
+            grep -q 'here="\$FAKE_PWD"' wrapper || { echo "the cwd line moved; update this check" >&2; exit 1; }
+
+            fail() { echo "FAIL: $1" >&2; exit 1; }
+            expect() { # <cwd> <expected> [args...]
+              FAKE_PWD="$1"; want="$2"; shift 2
+              export FAKE_PWD
+              got=$(./wrapper "$@")
+              [ "$got" = "$want" ] || fail "in $FAKE_PWD with [$*]: expected '$want', got '$got'"
+            }
+
+            org=${lib.escapeShellArg hm.my.orgs.datadir.directory}
+            other=${lib.escapeShellArg hm.my.orgs.bunny.directory}
+
+            expect "$org"          "herdr --session datadir"
+            expect "$org/deep/x"   "herdr --session datadir"
+            expect "$other"        "herdr --session bunny"
+            expect "$org-other"    "herdr"
+            expect /tmp            "herdr"
+            expect "$org" "herdr session list"                  session list
+            expect "$org" "herdr status"                        status
+            expect "$org" "herdr server stop"                   server stop
+            expect "$org" "herdr --session other"               --session other
+            expect "$org" "herdr --remote host"                 --remote host
+            expect "$org" "herdr --version"                     --version
+            expect "$org" "herdr --session datadir --handoff"   --handoff
+            echo "  ok: wrapper injects the org session and passes subcommands through"
+            touch $out
+          '';
 
         # The global commit-msg policy (modules/home/git-hooks.nix) rewrites and
         # rejects commit messages, so a regression either mangles real messages

@@ -13,6 +13,7 @@
     ./comms.nix
     ./orgs.nix
     ./org.nix
+    ./herdr.nix
     ./git.nix
     ./git-hooks.nix
     ./security.nix

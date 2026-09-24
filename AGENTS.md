@@ -90,7 +90,8 @@ modules/nixos/                System modules — core (baseline, always imported
 modules/home/                 home-manager modules: shell, cli, terminal, editor,
                               browsers, office, proton, media, comms, git, dev, hyprland,
                               orgs (the `my.orgs` declaration) + org (workspaces
-                              and the `org` launcher built from it)
+                              and the `org` launcher built from it) + herdr
+                              (one persistent multiplexer session per org)
 home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
 docs/                         Workflows a human follows, not module rationale

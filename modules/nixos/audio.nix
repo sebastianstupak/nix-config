@@ -163,9 +163,16 @@ let
         # switches; the wixburn marker in the header is how upstream tells them
         # apart.
         if head -c 4096 -- "$exe" | grep -qaF '.wixburn'; then
+          # Live 11 ships a WiX Burn bundle, which ignores the Inno switches
+          # entirely — upstream's own note says to run it without them and click
+          # through its window.
           flags=(/passive /norestart)
         else
-          flags=(/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-)
+          # '/MERGETASKS=!audiodriver' comes from upstream's printed guidance:
+          # it skips Ableton's Windows USB audio driver, which does nothing on
+          # Linux. Worth having — that driver is what leaves a tray agent and a
+          # scheduled task behind in the prefix for no benefit.
+          flags=(/SILENT /SUPPRESSMSGBOXES /NORESTART '/MERGETASKS=!audiodriver')
         fi
 
         # From the installer's own directory: its payload lookups for
@@ -204,7 +211,11 @@ let
       # These are WINDOWS VST3s — only loadable by a Windows host in this
       # prefix, which is why they belong to the Ableton slice rather than beside
       # it, even though VST3 is a cross-DAW format in general.
-      vst3_win="$HOME/.wine-ableton/drive_c/Program Files/Common Files/VST3"
+      # $prefix, not a hardcoded ~/.wine-ableton: with ABLETON_WINEPREFIX set to
+      # anything else this silently linked the DEFAULT prefix instead of the one
+      # just built — and skipped, because that one was already a symlink. Found
+      # by running the whole thing against a throwaway prefix.
+      vst3_win="$prefix/drive_c/Program Files/Common Files/VST3"
       if [ ! -L "$vst3_win" ]; then
         # An existing real directory is only safe to replace when empty —
         # anything in it was installed there and would vanish from Live.

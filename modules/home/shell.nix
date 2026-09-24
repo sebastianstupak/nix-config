@@ -42,7 +42,20 @@
     '';
   };
 
-  programs.starship.enable = true;
+  programs.starship = {
+    enable = true;
+
+    # Otherwise starship runs on its stock config — Stylix only writes the
+    # colour palette into starship.toml, never a `format` — and the stock
+    # config includes a battery module that appears below 10% and shows a
+    # coloured glyph plus the percentage in the prompt.
+    #
+    # Off rather than restyled: the bar already has a battery module with
+    # warning/critical colours, and a prompt that changes shape when the
+    # laptop is low is exactly when you least want the line you are typing on
+    # to move.
+    settings.battery.disabled = true;
+  };
 
   # Smarter cd + fuzzy finder, wired into zsh.
   programs.zoxide = {

@@ -73,7 +73,10 @@ let
       abletonPkgs.default # wine, wineboot, wineserver
     ];
     text = ''
-      dir="''${ABLETON_INSTALLER_DIR:-$HOME/Proprietary}"
+      # Lowercase, unlike upstream's $HOME/Proprietary default — nothing else in
+      # this home directory is capitalised, and the whole point of exporting
+      # ABLETON_INSTALLER_DIR below is that the location is ours to choose.
+      dir="''${ABLETON_INSTALLER_DIR:-$HOME/proprietary}"
       mkdir -p "$dir"
 
       if [ -z "$(find "$dir" -maxdepth 1 -type f -iname 'ableton_live*.zip' -print -quit)" ]; then

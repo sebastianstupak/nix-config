@@ -26,6 +26,7 @@
 # is the part that will need re-checking if Claude Code changes how hooks are
 # spawned — the setting alone cannot do both.
 {
+  config,
   lib,
   pkgs,
   ...
@@ -80,8 +81,14 @@ let
   };
 in
 {
+  # Applied to EVERY config dir, not just ~/.claude: a per-directory profile
+  # (modules/home/claude-code-profiles.nix) is a separate config dir with its own
+  # settings.json, so a work session would otherwise run without the notification
+  # channel or the bell — the one place where missing a notification costs most.
   home.activation.claudeCodeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    settings="$HOME/.claude/settings.json"
+    for settings in ${
+      lib.escapeShellArgs (map (dir: "${dir}/settings.json") config.my.claude.configDirs)
+    }; do
     mkdir -p "$(dirname "$settings")"
     [ -s "$settings" ] || echo '{}' > "$settings"
 
@@ -107,13 +114,14 @@ in
       # applying this one.
       if ! ${pkgs.diffutils}/bin/cmp -s "$settings" "$tmp"; then
         mv "$tmp" "$settings"
-        echo "claude-code: notif channel ${notifChannel} + bell hook applied"
+        echo "claude-code: notif channel ${notifChannel} + bell hook applied to $settings"
       else
         rm -f "$tmp"
       fi
     else
       rm -f "$tmp"
-      echo "claude-code: ~/.claude/settings.json is not valid JSON; left untouched" >&2
+      echo "claude-code: $settings is not valid JSON; left untouched" >&2
     fi
+    done
   '';
 }

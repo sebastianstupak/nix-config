@@ -16,6 +16,7 @@
     ./security.nix
     ./dev.nix
     ./claude-code.nix
+    ./claude-code-profiles.nix
     ./hyprland.nix
     ./waybar.nix
     ./notifications.nix

@@ -22,6 +22,7 @@
     # pins its own nixos-unstable, which cache.nixos.org already covers, so the
     # "big from-source build" this import was parked for is mostly just Wine.
     ../../modules/nixos/audio.nix # inert until my.ableton.enable below
+    ../../modules/nixos/gaming.nix # inert until my.gaming.enable below
   ];
 
   # Pro-audio + Ableton Live. Opt-in rather than implied by the import, because
@@ -30,6 +31,12 @@
   # should arrive on a host as a side effect of importing a file. See
   # docs/ABLETON.md.
   my.ableton.enable = true;
+
+  # Steam/Proton, Lutris, and Prism Launcher for Minecraft. Opt-in for the same
+  # reason as above: it brings in a whole second 32-bit graphics stack, which is
+  # not something a machine should acquire by importing a file. See
+  # docs/GAMING.md.
+  my.gaming.enable = true;
 
   networking.hostName = "workstation";
 

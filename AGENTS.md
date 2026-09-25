@@ -86,7 +86,8 @@ hosts/<host>/
   hardware-configuration.nix  Machine-specific; regenerated on the host, committed
 modules/nixos/                System modules — core (baseline, always imported via default.nix)
                               + opt-in profiles: desktop (Hyprland), stylix (theming),
-                              laptop (power/bt/fw), containers (docker)
+                              laptop (power/bt/fw), containers (docker),
+                              audio (Ableton), gaming (Steam/Proton)
 modules/home/                 home-manager modules: shell, cli, terminal, editor,
                               browsers, office, proton, media, comms, git, dev, hyprland,
                               orgs (the `my.orgs` declaration) + org (workspaces
@@ -95,7 +96,7 @@ modules/home/                 home-manager modules: shell, cli, terminal, editor
 home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
 docs/                         Workflows a human follows, not module rationale
-                              (INSTALL.md, ABLETON.md, ORGS.md). A module comment explains
+                              (INSTALL.md, ABLETON.md, ORGS.md, GAMING.md). A module comment explains
                               why a line of Nix exists; a doc explains what to do
                               on a new machine. Link the doc from the module.
 ```

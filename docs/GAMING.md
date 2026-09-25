@@ -5,7 +5,7 @@ implemented in `modules/nixos/gaming.nix`. Importing the module does nothing on
 its own.
 
 What it turns on: Steam with Proton, Lutris for everything outside Steam,
-gamemode and MangoHud, and Prism Launcher for Minecraft.
+gamescope/gamemode/MangoHud for performance, and Prism Launcher for Minecraft.
 
 ## The hardware you are working with
 
@@ -21,6 +21,31 @@ Two knobs matter more than graphics settings here:
   frame times get choppy after ten minutes, that is heat, not the GPU.
 - **Memory.** An iGPU takes its VRAM from system RAM. Closing a browser with
   forty tabs does more for a game than dropping a setting.
+
+### Render smaller, upscale — the one that actually works
+
+Before turning settings down, turn *resolution* down and let **gamescope**
+upscale. It runs the game in a nested session and scales the result to the
+panel with FSR, which looks far better than a low preset at native resolution.
+
+In Steam: *Properties → Launch Options*
+
+```
+gamescope -W 1920 -H 1080 -w 1280 -h 720 -U -f -- %command%
+```
+
+- `-W/-H` the output (your panel), `-w/-h` what the game renders at
+- `-U` FSR upscaling, `-f` fullscreen
+
+Drop `-w/-h` to 1600x900 first; go to 1280x720 if it is still short of smooth.
+Outside Steam, the same flags work directly: `gamescope -W 1920 -H 1080 -w 1280
+-h 720 -U -f -- <game>`.
+
+Combine it with the rest: `gamemoderun gamescope -U -f -- %command%`.
+
+(`which gamescope` reports `/run/wrappers/bin/gamescope` rather than a store
+path. That is correct — it is installed as a setcap wrapper so it can raise its
+own scheduling priority, and that directory is on PATH.)
 
 Check both with MangoHud rather than guessing:
 
@@ -45,6 +70,9 @@ Valve cannot ship for licensing reasons. That single swap fixes most of it.
 
 To see whether a specific game works before buying it, check
 [ProtonDB](https://www.protondb.com/) — it is community reports per title.
+
+**protontricks** is installed for the "this game needs a Windows DLL" class of
+problem. You will not need it until a ProtonDB report tells you to.
 
 **gamemode** is on. Steam applies it automatically; elsewhere run
 `gamemoderun <game>`. It asks the CPU governor for performance while the game

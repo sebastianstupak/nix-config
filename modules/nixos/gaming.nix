@@ -55,6 +55,26 @@ in
       dedicatedServer.openFirewall = false;
     };
 
+    # The single most useful thing on integrated graphics: gamescope is a
+    # micro-compositor that runs a game in its own nested session, so you can
+    # render at 720p and upscale to the panel with FSR instead of running the
+    # game at native resolution and dropping every setting to low. On a Vega
+    # iGPU that is the difference between a slideshow and something playable,
+    # and it costs nothing when unused.
+    #
+    # capSysNice lets it raise its own scheduling priority, which is what stops
+    # the compositor itself stuttering under load. It is a capability on one
+    # binary, not a system-wide realtime grant.
+    programs.gamescope = {
+      enable = true;
+      capSysNice = true;
+    };
+
+    # Per-game Windows dependency fixes (the "install this DLL or the game will
+    # not start" class of problem). Nothing runs it unprompted; it is there for
+    # when a ProtonDB report says a title needs one.
+    programs.steam.protontricks.enable = true;
+
     # udev rules for Steam Controller, Steam Deck and the common third-party
     # pads. Harmless without a controller attached — it is only rules.
     hardware.steam-hardware.enable = true;

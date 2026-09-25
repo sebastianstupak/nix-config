@@ -90,6 +90,15 @@ listening by default.
 25 inside its own closure, so every Minecraft version has the Java it expects
 and nothing is installed system-wide.
 
+Java is handled for you. The package sets `PRISMLAUNCHER_JAVA_PATHS` to the
+JDKs in its own closure, and Prism picks the right one per instance — do not
+pin a Java path in its settings, because a store path written there by hand
+stops matching the moment the package updates.
+
+Prism's own settings live in `~/.local/share/PrismLauncher/` and are imperative
+state, like the Ableton prefix: the launcher rewrites them at runtime, so they
+are not managed from this repo. Instances and saves live there too.
+
 First run:
 
 1. **Add your account** — *Accounts → Manage Accounts → Add Microsoft*. It opens

@@ -16,7 +16,12 @@
   # Bluetooth + a tray applet (Hyprland ships no built-in one).
   hardware.bluetooth = {
     enable = true;
-    powerOnBoot = true;
+
+    # Adapter stays off until something asks for it. On by default means the
+    # laptop announces itself on every network it wakes up on, for a radio that
+    # is idle most days — `bluetoothctl power on`, or the bar's applet, brings
+    # it up when there is actually something to pair with.
+    powerOnBoot = false;
 
     # Battery levels for connected devices (headphones, mice). BlueZ only exposes
     # org.bluez.Battery1 with Experimental on — without it the D-Bus property

@@ -45,7 +45,17 @@
   # The age key used to decrypt secrets is derived from this host's SSH host key.
   # No secrets are declared yet, so this is currently a no-op. To add one, see
   # secrets/README.md. openssh is enabled so the host key exists to derive from.
-  services.openssh.enable = true;
+  #
+  # Enabled for that key and nothing else — this machine is never SSHed into.
+  # Left at the defaults it also opened port 22 and accepted passwords, which on
+  # a laptop that joins café and hotel networks is a password-guessable service
+  # offered to every other device on the LAN. The service still runs so the host
+  # key is generated and rotated as usual; it is simply unreachable.
+  services.openssh = {
+    enable = true;
+    openFirewall = false;
+    settings.PasswordAuthentication = false;
+  };
   sops.age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
   # ------------------------------------------------------------------------
 

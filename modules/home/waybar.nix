@@ -674,10 +674,9 @@ in
 
         # Keyed on the workspace NAME Hyprland gives each one, which is why the
         # naming rule lives in modules/home/org.nix and is shared rather than
-        # repeated here. "1" is the scratch workspace and keeps its number; the
-        # default covers Hyprland's special workspaces, which have no org.
+        # repeated here. The default covers Hyprland's special workspaces, which
+        # belong to no org.
         format-icons = {
-          "1" = "1";
           default = "•";
         }
         // builtins.listToAttrs (
@@ -704,13 +703,14 @@ in
         # single boolean class, and neither ghostty nor Hyprland surfaces
         # per-surface state to an external process.
 
-        # Only workspace 1 is a placeholder here. The org workspaces (2-5) are
-        # made persistent by Hyprland itself in modules/home/org.nix, so they
-        # already exist when the bar starts and need no placeholder — and a
-        # placeholder would actively hurt: measured, with `"*" = 5` the numeric
-        # placeholder wins over the real workspace and every org renders as a
-        # bare number instead of its name. 6-9 appear on demand as before.
-        persistent-workspaces."*" = 1;
+        # No placeholders at all. Every workspace 1-9 belongs to an org and is
+        # made persistent by Hyprland itself (modules/home/org.nix), so they all
+        # exist before the bar starts and there is nothing left to reserve.
+        #
+        # A placeholder would now actively break it: measured earlier, a numeric
+        # placeholder wins over the real workspace, so reserving "1" would put a
+        # bare `1` beside personal's glyph rather than instead of it — one
+        # workspace, two chips.
       };
 
       # Now playing. Native module (waybar links libplayerctl), so this is the

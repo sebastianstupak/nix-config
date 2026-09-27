@@ -155,16 +155,21 @@
   # company domain, a CLA that checks the author), change that one line; nothing
   # else moves.
   #
-  # Each org owns a PAIR of workspaces and wears one glyph in one colour on
-  # both, so the bar reads as four coloured pairs: where you are, and which of
-  # the org's two screens you are on. The first of each pair is the org's home —
-  # `org <name>` lands there and opens its terminal there; the second is for
+  # Each org owns a run of workspaces and wears one glyph in one colour across
+  # all of them, so the bar reads as coloured groups: where you are, and which
+  # of that org's screens you are on. The FIRST of each run is the org's home —
+  # `org <name>` lands there and opens its terminal there; the rest are for
   # whatever wants its own screen, a browser or a running log.
   #
-  # 2-9 are spoken for, which is exactly the range $mod+1..9 already binds.
-  # 1 is left unclaimed on purpose: it is where you land at login and where
-  # anything belonging to no org goes — this config, a scratch shell, a browser
-  # opened to look one thing up. $mod+O picks an org; see modules/home/org.nix.
+  # personal owns 1-3, and owning 1 is the point: that is where you land at
+  # login, so the machine's resting state belongs to an org rather than to a
+  # no-man's-land that everything unfiled drifts into. It gets three screens
+  # because it is the one that also absorbs the odd jobs — this config, a
+  # scratch shell, a browser opened to look one thing up.
+  #
+  # Work follows behind it, and 1-9 is exactly the range $mod+1..9 already
+  # binds. Reordering is one line per org; nothing else depends on the numbers.
+  # $mod+O picks an org; see modules/home/org.nix.
   #
   # Icons are checked against the bar's font before being used here (a missing
   # glyph renders as an empty box, which reads as a bug): each was rendered on
@@ -180,8 +185,8 @@
       datadir = {
         email = me;
         workspaces = [
-          2
-          3
+          4
+          5
         ];
         icon = "󰆼"; # database
         color = "base0D"; # blue
@@ -189,8 +194,8 @@
       hettify = {
         email = me;
         workspaces = [
-          4
-          5
+          6
+          7
         ];
         icon = "󰒋"; # server
         color = "base0E"; # mauve
@@ -198,8 +203,8 @@
       bunny = {
         email = me;
         workspaces = [
-          6
-          7
+          8
+          9
         ];
         icon = "󰤇"; # rabbit
         color = "base0A"; # sand
@@ -207,8 +212,9 @@
       personal = {
         email = me;
         workspaces = [
-          8
-          9
+          1
+          2
+          3
         ];
         icon = "󰋜"; # house
         color = "base0B"; # green

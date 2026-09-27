@@ -74,21 +74,27 @@ is what removes the entry.
 
 ## Reading the bar
 
-The centre of the bar is one glyph per workspace:
+The centre of the bar is one glyph per workspace, grouped by org:
 
 ```
-1   󰆼 󰆼   󰒋 󰒋   󰤇 󰤇   󰋜 󰋜
+󰋜 󰋜 󰋜   󰆼 󰆼   󰒋 󰒋   󰤇 󰤇
+personal  datadir hettify bunny
 ```
 
-Each org wears one glyph in one colour across both of its workspaces. A dimmed
-glyph means that workspace is empty; the underline is where you are. Workspace
-`1` keeps its number: it belongs to no org and is where anything else goes — a
-scratch shell, this config, a browser opened to look one thing up.
+Each org wears one glyph in one colour across all of its workspaces. A dimmed
+glyph means that workspace is empty; the underline is where you are.
 
-Workspaces 1 and 2 show their numbers instead of names until the next login.
-Hyprland only applies a workspace's name when the workspace is *created*, so
-ones that already existed keep their number for that session. Not a bug, and it
-sorts itself out on the next login.
+**personal owns 1-3**, and owning workspace 1 is deliberate: that is where you
+land at login, so the machine's resting state belongs to an org rather than to
+a no-man's-land that everything unfiled drifts into. It has three screens
+because it is also where the odd jobs go — a scratch shell, this config, a
+browser opened to look one thing up. Work orgs follow behind it.
+
+A workspace shows a number instead of a glyph until the next login if it
+already existed when the rules changed. Hyprland applies a workspace's name
+only when the workspace is *created*, so renumbering the orgs takes effect at
+the next login rather than at the next rebuild. Not a bug, and it clears
+itself.
 
 ## Adding an org
 
@@ -102,6 +108,10 @@ acme = {
   color = "base0C";                # a base16 key, not a hex value
 };
 ```
+
+1-9 are all spoken for, and those are the numbers `$mod+1`..`$mod+9` binds. A
+fifth org means either taking screens from an existing one — most likely one of
+personal's three — or living with workspaces only the launcher can reach.
 
 Then rebuild. The directory, the git rule, the assistant profile, the workspace
 rules, the bar glyph and the herdr session all follow.

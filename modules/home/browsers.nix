@@ -70,36 +70,24 @@ in
         addons.proton-pass
       ];
 
-      # Dark everywhere, including what websites are told.
+      # No fingerprinting overrides here, deliberately.
       #
-      # The chrome was already dark via stylix; pages were not, because
-      # LibreWolf enables privacy.resistFingerprinting, and RFP pins
-      # prefers-color-scheme to light so the preference cannot be used to
-      # identify you.
+      # LibreWolf's resistFingerprinting pins prefers-color-scheme to light so
+      # the preference cannot be used to identify you, and it wins over every
+      # pref that claims to change it. Measured on 155 against a page reporting
+      # matchMedia, with RFP on: ui.systemUsesDarkTheme=1 gives light, and
+      # layout.css.prefers-color-scheme.content-override=1 gives light. Both are
+      # widely recommended and neither works.
       #
-      # The advice you will find everywhere is to set ui.systemUsesDarkTheme=1.
-      # That does NOT work here — measured on 155 with a page that reports
-      # matchMedia('(prefers-color-scheme: dark)'): still light. The bug asking
-      # for that behaviour was closed on the grounds that per-feature RFP
-      # overrides make you more identifiable, not less.
+      # The only browser-wide way to dark pages is to give RFP up, and that was
+      # tried and reverted: a dark website is not worth the strongest
+      # anti-fingerprinting setting the browser has.
       #
-      # What does work is swapping RFP for its finer-grained successor and
-      # excluding exactly one target. +AllTargets keeps the rest of the
-      # protections on; -CSSPrefersColorScheme is the single thing given up.
-      #
-      # Deliberately no ui.systemUsesDarkTheme here either: with RFP off,
-      # LibreWolf reads the desktop's colour-scheme from the portal, so this
-      # follows the system instead of pinning dark. Verified both ways — the
-      # portal alone was enough to render dark, so pinning would only stop it
-      # tracking a future change of mind.
-      #
-      # The trade is real but small: this leaks one bit that most visitors also
-      # leak, in exchange for every site not being a lightbulb.
-      settings = {
-        "privacy.resistFingerprinting" = false;
-        "privacy.fingerprintingProtection" = true;
-        "privacy.fingerprintingProtection.overrides" = "+AllTargets,-CSSPrefersColorScheme";
-      };
+      # So dark mode is per-site instead, set in each site's own account
+      # settings. It costs nothing in fingerprinting, and it looks better than
+      # any automatic inversion because the site designed the dark palette. The
+      # chrome is already dark via stylix.
+
       bookmarks = {
         force = true;
         settings = protonBookmarks;

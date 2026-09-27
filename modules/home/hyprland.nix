@@ -258,7 +258,10 @@
   # launching desktop entries.
   xdg.configFile."networkmanager-dmenu/config.ini".text = ''
     [dmenu]
-    dmenu_command = fuzzel -d
+    # Presented as a dialog rather than a bare list: its own prompt, wide
+    # enough for "SSID  WPA2  ***" without truncating, and tall enough to show
+    # a room's worth of networks without scrolling.
+    dmenu_command = fuzzel -d -p "Wi-Fi  " -w 46 -l 14
     active_chars = ●○
     highlight = True
     compact = True

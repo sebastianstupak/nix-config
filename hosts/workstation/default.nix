@@ -38,6 +38,24 @@
   # docs/GAMING.md.
   my.gaming.enable = true;
 
+  # Backups. One shared restic repository for every machine here — restic
+  # deduplicates across the whole thing, so the licensed artifacts and dotfiles
+  # that are identical on four laptops cost storage once. Snapshots carry the
+  # hostname and `forget` groups by it, so each machine keeps its own history.
+  #
+  # This host is the one that prunes. Pruning takes an exclusive lock, so it has
+  # to be exactly one of them; the others back up and expire nothing. See
+  # modules/nixos/backup.nix.
+  #
+  # The repository is in a Scaleway organization of its own, not the company's,
+  # and the key that reaches it is scoped to that one project — a stolen laptop
+  # cannot use it to touch anything else. restic encrypts client-side, so the
+  # provider stores ciphertext either way.
+  my.backup = {
+    repository = "s3:https://s3.fr-par.scw.cloud/sstupak-restic-backups";
+    prune = true;
+  };
+
   networking.hostName = "workstation";
 
   # Bootloader. systemd-boot assumes UEFI firmware — adjust if you use BIOS/GRUB.

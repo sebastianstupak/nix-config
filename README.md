@@ -43,6 +43,7 @@ these explain what to do.
 | [docs/ORGS.md](./docs/ORGS.md) | The org model: identities, assistant profiles, workspaces, sessions |
 | [docs/ABLETON.md](./docs/ABLETON.md) | The opt-in Ableton Live slice: installing, plugins, what is reproducible and what is not |
 | [docs/GAMING.md](./docs/GAMING.md) | The opt-in gaming slice: Steam/Proton, Lutris, and Minecraft via Prism Launcher |
+| [docs/BACKUP.md](./docs/BACKUP.md) | restic to object storage: what is backed up, restoring, and the several-machines design |
 | [docs/MUSIC.md](./docs/MUSIC.md) | MuseScore and Muse Hub: sound libraries, the audio path, and two things that are not bugs |
 
 ## Day-to-day

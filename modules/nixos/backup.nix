@@ -1,5 +1,8 @@
 # Backups of $HOME with restic.
 #
+# Restoring, adding a machine, rotating the key, and what is deliberately not
+# backed up: docs/BACKUP.md. Practise the restore before you need it.
+#
 # This file is the MECHANISM and does nothing until `my.backup.repository` is
 # set — see the option's description for the one-time setup. That gate is
 # deliberate: a backup module that silently does nothing is worse than one that
@@ -48,6 +51,28 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ "/home/sebastianstupak" ];
       description = "Directories to back up.";
+    };
+
+    prune = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether THIS host applies the retention policy to the repository.
+
+        Every machine here backs up to one shared repository, because restic
+        deduplicates across the whole thing: the same licensed artifacts and the
+        same dotfiles on four laptops are stored once, not four times. Snapshots
+        carry the hostname, and `forget` groups by host, so each machine keeps
+        its own history rather than aging out its siblings'.
+
+        Pruning is the part that cannot be shared. It takes an EXCLUSIVE lock on
+        the repository, so four machines pruning daily would collide and the
+        losers would fail their timers — a red indicator every morning that
+        means nothing. Exactly one host should own it.
+
+        Off by default so that adding a machine is safe: a new host backs up and
+        nothing else until you decide it should be the one that prunes.
+      '';
     };
   };
 
@@ -122,9 +147,17 @@ in
         RandomizedDelaySec = "1h";
       };
 
-      # Retention. Runs after each backup, so the repository does not grow
-      # forever. Restic's forget is safe to interrupt; prune is what reclaims.
-      pruneOpts = [
+      # Retention, on the designated pruner only — see `my.backup.prune`.
+      # Empty here means this host backs up and never expires anything, which is
+      # what every machine except one should do against a shared repository.
+      #
+      # `--group-by host,paths` is restic's default and is written out anyway,
+      # because the whole multi-machine design rests on it: it makes "keep 7
+      # daily" mean seven per machine. Were it ever to become a flat global
+      # policy, four machines would quietly evict each other's history and the
+      # symptom would be a missing snapshot nobody thinks to look for.
+      pruneOpts = lib.optionals cfg.prune [
+        "--group-by host,paths"
         "--keep-daily 7"
         "--keep-weekly 5"
         "--keep-monthly 12"

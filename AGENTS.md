@@ -97,7 +97,7 @@ home/<user>/                  Per-user home-manager config (identity)
 secrets/                      Encrypted secrets only (sops-nix)
 docs/                         Workflows a human follows, not module rationale
                               (INSTALL.md, ABLETON.md, ORGS.md, GAMING.md,
-                              MUSIC.md). A module comment explains
+                              MUSIC.md, BACKUP.md). A module comment explains
                               why a line of Nix exists; a doc explains what to do
                               on a new machine. Link the doc from the module.
 ```

@@ -24,7 +24,7 @@ cannot be forgotten.
 |---|---|---|
 | Commit identity | `email` → `includeIf gitdir:` + `allowed_signers` | `modules/home/git.nix` |
 | Assistant account, MCP servers | a profile named after the org, rooted at its directory | `modules/home/claude-code-profiles.nix` |
-| Two workspaces, a glyph, a colour | `workspaces`, `icon`, `color` | `modules/home/org.nix`, `modules/home/waybar.nix` |
+| A run of workspaces, a glyph, a colour | `workspaces`, `icon`, `color` | `modules/home/org.nix`, `modules/home/waybar.nix` |
 | A persistent terminal session | a herdr session named after the org | `modules/home/herdr.nix` |
 
 ## Daily use
@@ -77,12 +77,24 @@ is what removes the entry.
 The centre of the bar is one glyph per workspace, grouped by org:
 
 ```
-󰋜 󰋜 󰋜   󰆼 󰆼   󰒋 󰒋   󰤇 󰤇
-personal  datadir nettify bunny
+1  2  3     󰒋 󰒋      󰖟 󰖟      󰤇 󰤇
+personal    datadir   nettify   bunny
 ```
 
-Each org wears one glyph in one colour across all of its workspaces. A dimmed
-glyph means that workspace is empty; the underline is where you are.
+Each org wears one glyph in one colour across all of its workspaces, its home
+screen at full strength and its extra screens as fainter echoes of the same
+glyph — so the row reads as groups rather than nine unrelated chips. The
+underline is where you are.
+
+**personal is numbered, not glyphed.** An empty `icon` means "label these with
+their workspace numbers", which is the right answer for the org you land on at
+login: a fourth glyph there is one more thing to learn, and 1 2 3 already tell
+its screens apart.
+
+Pick shapes that differ, not just colours. A database cylinder and a server rack
+were the first choice for datadir and nettify, and they are the same stacked
+bands at bar size — indistinguishable in practice, and no amount of colour
+rescued them in a scheme this muted. A rack and a globe share no silhouette.
 
 **personal owns 1-3**, and owning workspace 1 is deliberate: that is where you
 land at login, so the machine's resting state belongs to an org rather than to
@@ -104,7 +116,7 @@ One entry in `my.orgs` in `home/sebastianstupak/default.nix`:
 acme = {
   email = "me@acme.example";       # omit to keep the global identity
   workspaces = [ 10 11 ];          # must not collide with another org
-  icon = "󰀄";                      # must exist in the bar's font
+  icon = "󰀄";                      # or "" to label them with numbers
   color = "base0C";                # a base16 key, not a hex value
 };
 ```
@@ -116,15 +128,12 @@ personal's three — or living with workspaces only the launcher can reach.
 Then rebuild. The directory, the git rule, the assistant profile, the workspace
 rules, the bar glyph and the herdr session all follow.
 
-Two things the build will stop you on, because both fail silently otherwise:
+The build stops you if **two orgs claim the same workspace**, because `org`
+would otherwise take you to someone else's screen.
 
-- **two orgs claiming the same workspace** — `org` would take you to someone
-  else's screen
-- **an org with workspaces but no icon** — an empty glyph is a chip you can
-  click and cannot see
-
-Check a glyph exists before using it, and look at it — several plausible
-codepoints are not what their name suggests:
+It cannot stop you picking a bad glyph, so check one exists and then *look* at
+it — several plausible codepoints are not what their name suggests, and one the
+font lacks renders as an empty box:
 
 ```bash
 fc-list ':charset=f0907' family      # is it in the font at all

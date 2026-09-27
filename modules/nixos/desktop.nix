@@ -69,6 +69,28 @@
   services.gnome.gnome-keyring.enable = true;
   security.pam.services.greetd.enableGnomeKeyring = true;
 
+  # A system Chrome, where tools that hardcode the FHS path expect to find one.
+  #
+  # Playwright — and the browser-automation MCP server built on it — defaults to
+  # the "chrome" channel, which is not a package lookup but a literal check for
+  # /opt/google/chrome/chrome. On a distro with an FHS that path exists; here
+  # nothing does, so automation fails with "Chromium distribution 'chrome' is
+  # not found" and no hint that the browser is in fact installed.
+  #
+  # The obvious fix is one `ln -s` into /opt, and that is exactly the kind of
+  # undeclared drift this config exists to avoid: it survives reboots, is
+  # invisible to `nixos-rebuild`, and silently pins a store path that the next
+  # Chromium update invalidates. As a tmpfiles rule it is declared, reproduced
+  # on a new machine, and re-pointed automatically when the package changes.
+  #
+  # Chromium rather than Google Chrome: it is the browser already installed
+  # here, and automation does not need the proprietary build. Anything that
+  # genuinely requires Chrome-only behaviour should ask for it explicitly.
+  systemd.tmpfiles.rules = [
+    "d /opt/google/chrome 0755 root root -"
+    "L+ /opt/google/chrome/chrome - - - - ${pkgs.chromium}/bin/chromium"
+  ];
+
   services.gvfs.enable = true;
 
   # Printing. CUPS alone only reaches printers you can name; avahi is what makes

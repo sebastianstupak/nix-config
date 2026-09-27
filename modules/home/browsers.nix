@@ -61,7 +61,45 @@ in
   programs.librewolf = {
     enable = true;
     profiles.default = {
-      extensions.packages = [ addons.proton-pass ];
+      # uBlock Origin is NOT bundled in this build — checked, the distribution
+      # ships no extensions at all, unlike LibreWolf's own binaries. So without
+      # this line there is no content blocking beyond the built-in tracking
+      # protection, which is a different and much narrower job.
+      extensions.packages = [
+        addons.ublock-origin
+        addons.proton-pass
+      ];
+
+      # Dark everywhere, including what websites are told.
+      #
+      # The chrome was already dark via stylix; pages were not, because
+      # LibreWolf enables privacy.resistFingerprinting, and RFP pins
+      # prefers-color-scheme to light so the preference cannot be used to
+      # identify you.
+      #
+      # The advice you will find everywhere is to set ui.systemUsesDarkTheme=1.
+      # That does NOT work here — measured on 155 with a page that reports
+      # matchMedia('(prefers-color-scheme: dark)'): still light. The bug asking
+      # for that behaviour was closed on the grounds that per-feature RFP
+      # overrides make you more identifiable, not less.
+      #
+      # What does work is swapping RFP for its finer-grained successor and
+      # excluding exactly one target. +AllTargets keeps the rest of the
+      # protections on; -CSSPrefersColorScheme is the single thing given up.
+      #
+      # Deliberately no ui.systemUsesDarkTheme here either: with RFP off,
+      # LibreWolf reads the desktop's colour-scheme from the portal, so this
+      # follows the system instead of pinning dark. Verified both ways — the
+      # portal alone was enough to render dark, so pinning would only stop it
+      # tracking a future change of mind.
+      #
+      # The trade is real but small: this leaks one bit that most visitors also
+      # leak, in exchange for every site not being a lightbulb.
+      settings = {
+        "privacy.resistFingerprinting" = false;
+        "privacy.fingerprintingProtection" = true;
+        "privacy.fingerprintingProtection.overrides" = "+AllTargets,-CSSPrefersColorScheme";
+      };
       bookmarks = {
         force = true;
         settings = protonBookmarks;

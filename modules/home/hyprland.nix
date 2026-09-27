@@ -263,6 +263,17 @@
     highlight = True
     compact = True
     list_saved = True
+
+    # Passphrases go through pinentry, not through the picker. Without this the
+    # tool falls back to asking fuzzel for the passphrase as ordinary text,
+    # which renders it on screen in full. Same pinentry gpg-agent already uses,
+    # so it looks like every other secret prompt here. Absolute path because the
+    # tool execs this string directly rather than looking it up on PATH.
+    pinentry = ${pkgs.pinentry-qt}/bin/pinentry-qt
+
+    [pinentry]
+    description = Wi-Fi passphrase
+    prompt = Passphrase
   '';
 
   # Utilities referenced by the binds / exec-once above.

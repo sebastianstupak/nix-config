@@ -56,6 +56,19 @@
   # actually complete. Without it there is no Trash — Nautilus has no
   # gvfsd-trash to move files into, so deleting is permanent-or-nothing — no
   # MTP, so a plugged-in phone does nothing, and no SMB/SFTP in the sidebar.
+  # Secret Service (org.freedesktop.secrets) — the D-Bus API desktop apps use to
+  # store a login rather than inventing their own credential file. There was no
+  # provider on this machine at all, which is not a missing nicety: an app that
+  # asks for it and finds nothing does not fall back politely. Muse Hub, for
+  # one, took an unhandled D-Bus exception and shut itself down mid-login, with
+  # nothing on screen to say why. See docs/MUSIC.md.
+  #
+  # PAM unlocks the keyring with the password already typed at greetd, so there
+  # is no second prompt at login. Without that line the daemon runs but the
+  # keyring stays locked, which fails in a more confusing way than not having it.
+  services.gnome.gnome-keyring.enable = true;
+  security.pam.services.greetd.enableGnomeKeyring = true;
+
   services.gvfs.enable = true;
 
   # Printing. CUPS alone only reaches printers you can name; avahi is what makes

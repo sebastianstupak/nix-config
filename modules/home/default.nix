@@ -10,6 +10,7 @@
     ./office.nix
     ./proton.nix
     ./media.nix
+    ./music.nix
     ./comms.nix
     ./orgs.nix
     ./org.nix

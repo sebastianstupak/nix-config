@@ -43,6 +43,7 @@ these explain what to do.
 | [docs/ORGS.md](./docs/ORGS.md) | The org model: identities, assistant profiles, workspaces, sessions |
 | [docs/ABLETON.md](./docs/ABLETON.md) | The opt-in Ableton Live slice: installing, plugins, what is reproducible and what is not |
 | [docs/GAMING.md](./docs/GAMING.md) | The opt-in gaming slice: Steam/Proton, Lutris, and Minecraft via Prism Launcher |
+| [docs/MUSIC.md](./docs/MUSIC.md) | MuseScore and Muse Hub: sound libraries, the audio path, and two things that are not bugs |
 
 ## Day-to-day
 
@@ -104,7 +105,7 @@ carries its own copy of that rule and a flake check keeps the two in step.
 | `flake.nix` | Inputs, `nixosConfigurations` (via `mkHost`), and the checks above |
 | `hosts/<host>/` | Per-machine config: imports the profiles it needs + hardware config |
 | `modules/nixos/` | System modules: `core` (baseline) + opt-in `desktop`/`stylix`/`laptop`/`containers`/`audio`/`gaming`/`backup`/`netbird` |
-| `modules/home/` | home-manager modules — shell/cli/terminal/editor, browsers, office, media, comms, git, dev, security, hyprland, waybar, notifications, calendar, and the org slice (`orgs`, `org`, `herdr`, `claude-code-profiles`) |
+| `modules/home/` | home-manager modules — shell/cli/terminal/editor, browsers, office, media, music, comms, git, dev, security, hyprland, waybar, notifications, calendar, and the org slice (`orgs`, `org`, `herdr`, `claude-code-profiles`) |
 | `home/<user>/` | Per-user config: identity, calendars, orgs — the data, not the mechanism |
 | `docs/` | Human workflows (see the table above) |
 | `.githooks/` + `scripts/` | Committed git hooks + the Conventional Commits check |

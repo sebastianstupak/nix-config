@@ -10,7 +10,7 @@
 # Both can export the variable; only the wrapper cannot be bypassed by accident:
 #
 #   * direnv only loads the .envrc it finds in the directory you are standing
-#     in. A repo at ~/dev/hettify/foo with its own .envrc (`use flake`,
+#     in. A repo at ~/dev/nettify/foo with its own .envrc (`use flake`,
 #     which every Nix project here has) does NOT inherit the parent one unless
 #     it remembers to call `source_up` — so the very repos the profile exists
 #     for are exactly the ones that would silently fall back to the personal
@@ -42,7 +42,7 @@ let
   cfg = config.my.claude;
   homeDir = config.home.homeDirectory;
 
-  # [ { name = "hettify"; value = <profile>; } ... ], the form every generator
+  # [ { name = "nettify"; value = <profile>; } ... ], the form every generator
   # below wants — each needs the attribute name as well as the value.
   named = lib.mapAttrsToList (name: profile: { inherit name profile; }) cfg.profiles;
 
@@ -140,13 +140,13 @@ let
         directory = lib.mkOption {
           type = lib.types.str;
           # Inherited from the org of the same name, so the two cannot drift.
-          # They already drifted once — a profile pointing at ~/dev/nettify
-          # while the org was ~/dev/hettify gives you a tree with the work
-          # Claude account and the wrong commit identity, and another with the
-          # right identity and the personal account. Both look fine until
-          # something is pushed. Naming the profile after the org is now enough
-          # to keep them on one path; the fallback repeats my.orgs' own default
-          # for a profile that is not an org.
+          # They already drifted once, over a one-letter difference in how the
+          # org's name was spelled: the profile pointed at one directory and the
+          # org at another. That gives you a tree with the right Claude account
+          # and the wrong commit identity, and a second tree with the reverse.
+          # Both look fine until something is pushed. Naming the profile after
+          # the org is now enough to keep them on one path; the fallback repeats
+          # my.orgs' own default for a profile that is not an org.
           default = config.my.orgs.${name}.directory or "${homeDir}/dev/${name}";
           defaultText = lib.literalExpression ''config.my.orgs.‹name›.directory, or "''${config.home.homeDirectory}/dev/‹name›"'';
           example = "/home/alice/dev/acme";

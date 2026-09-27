@@ -78,7 +78,7 @@ The centre of the bar is one glyph per workspace, grouped by org:
 
 ```
 󰋜 󰋜 󰋜   󰆼 󰆼   󰒋 󰒋   󰤇 󰤇
-personal  datadir hettify bunny
+personal  datadir nettify bunny
 ```
 
 Each org wears one glyph in one colour across all of its workspaces. A dimmed

@@ -251,6 +251,20 @@
     };
   };
 
+  # Wifi picker for the bar's network module (modules/home/waybar.nix).
+  # It shells out to whatever `dmenu_command` says, so pointing it at fuzzel
+  # makes joining a network look and behave like every other picker here —
+  # `-d` because fuzzel needs telling it is reading a list on stdin rather than
+  # launching desktop entries.
+  xdg.configFile."networkmanager-dmenu/config.ini".text = ''
+    [dmenu]
+    dmenu_command = fuzzel -d
+    active_chars = ●○
+    highlight = True
+    compact = True
+    list_saved = True
+  '';
+
   # Utilities referenced by the binds / exec-once above.
   home.packages = with pkgs; [
     grim # screenshot
@@ -261,7 +275,8 @@
     wlogout # power menu
     hyprsunset # night light daemon; toggled from waybar's backlight module
     pavucontrol # audio device / volume GUI
-    networkmanagerapplet # nm-connection-editor (nm-applet itself is unused now)
+    networkmanager_dmenu # the bar's wifi picker: scan, join, enter a passphrase
+    networkmanagerapplet # nm-connection-editor, for editing an existing connection
     nautilus # file manager
     polkit_gnome # authentication agent
   ];

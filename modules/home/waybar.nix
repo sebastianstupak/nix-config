@@ -908,11 +908,18 @@ in
         tooltip-format-wifi = "{essid} ({signalStrength}%)\n{ipaddr}";
         tooltip-format-ethernet = "{ifname}\n{ipaddr}";
         tooltip-format-disconnected = "Disconnected";
-        # Left: manage saved connections. Right: nmtui, which is the one that can
-        # actually scan for and join a new network now that nm-applet is gone —
-        # nm-connection-editor only edits connections, it cannot prompt for a
-        # wifi password. `ghostty -e` matches how fuzzel launches terminal apps.
-        on-click = "nm-connection-editor";
+        # Left click picks a network. This used to open nm-connection-editor,
+        # which cannot scan and cannot prompt for a wifi password — it only edits
+        # connections that already exist, so joining a new network meant knowing
+        # to right-click into a TUI instead. That is the wrong default for the
+        # thing you reach for when the wifi is the problem.
+        #
+        # networkmanager_dmenu drives NetworkManager through the same fuzzel
+        # picker as $mod+R and the clipboard history, so scanning, joining,
+        # entering a passphrase and switching networks are all one keyboard
+        # flow. nmtui stays on right-click as the fallback for when something
+        # needs an answer the picker cannot ask for.
+        on-click = "networkmanager_dmenu";
         on-click-right = "ghostty -e nmtui";
         max-length = 24;
       };

@@ -188,7 +188,7 @@
           4
           5
         ];
-        icon = "󰆼"; # database
+        icon = "󰒋"; # server rack
         color = "base0D"; # blue
       };
       nettify = {
@@ -216,7 +216,7 @@
           2
           3
         ];
-        icon = "󰋜"; # house
+        icon = ""; # none — personal is labelled with its numbers
         color = "base0B"; # green
       };
     };

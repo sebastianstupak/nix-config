@@ -272,18 +272,6 @@ in
     (lib.mkIf (named != [ ]) {
       assertions = [
         {
-          # An org with workspaces but no glyph would render as an empty span:
-          # a chip you can click but cannot see, which reads as the bar being
-          # broken rather than as a missing setting.
-          assertion = lib.all ({ org, ... }: org.icon != "") named;
-          message = ''
-            my.orgs: an org with workspaces has no icon. The bar shows the glyph
-            instead of the workspace number, so without one its workspaces are
-            invisible. Pick one the bar's font has:
-              fc-list ':charset=<codepoint>' family
-          '';
-        }
-        {
           assertion =
             lib.length (lib.unique (map ({ id, ... }: id) allWorkspaces)) == lib.length allWorkspaces;
           message = ''

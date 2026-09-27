@@ -682,14 +682,21 @@ in
         // builtins.listToAttrs (
           map (ws: {
             inherit (ws) name;
-            # An org's home screen is drawn at full strength and its extra
-            # screens as fainter echoes of the same glyph. Nine chips in a row
-            # at one weight read as nine unrelated things; this makes the eye
-            # group them, so the bar is four groups rather than a stripe.
-            # `alpha` is pango's, applied on top of whatever colour the org
-            # wears — CSS cannot reach an individual workspace here.
+            # An org with no glyph is labelled with its workspace numbers
+            # instead — plain, uncoloured, exactly what the bar looked like
+            # before any of this. That is the right treatment for the org you
+            # land on at login: a fourth glyph there is one more thing to learn
+            # for no gain, and numbers already tell its screens apart.
+            #
+            # The rest get their glyph, with an org's home screen at full
+            # strength and its extra screens as fainter echoes. Nine chips at
+            # one weight read as nine unrelated things; grouped, the row reads
+            # as four groups. `alpha` is pango's, because CSS cannot reach an
+            # individual workspace here.
             value =
-              if ws.index == 0 then
+              if ws.org.icon == "" then
+                toString ws.id
+              else if ws.index == 0 then
                 ''<span color="#${colors.${ws.org.color}}">${ws.org.icon}</span>''
               else
                 ''<span color="#${colors.${ws.org.color}}" alpha="60%">${ws.org.icon}</span>'';

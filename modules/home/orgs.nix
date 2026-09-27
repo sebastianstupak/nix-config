@@ -101,10 +101,16 @@
                 Glyph shown on each of this org's workspaces in the bar, in
                 place of the workspace number.
 
-                Must exist in the bar's font — check before choosing, with
-                `fc-list ':charset=<codepoint>' family`. A glyph the font does
-                not have renders as an empty box, which looks like a bug rather
-                than a missing icon.
+                Empty means the opposite: label this org's workspaces with their
+                numbers instead. That is the right choice for the org you land
+                on at login, where a plain 1 2 3 is more use than a fourth glyph
+                to learn.
+
+                A glyph must exist in the bar's font — check before choosing,
+                with `fc-list ':charset=<codepoint>' family` — and then look at
+                it, because several plausible codepoints are not what their name
+                suggests. One the font lacks renders as an empty box, which
+                looks like a bug rather than a missing icon.
               '';
             };
 

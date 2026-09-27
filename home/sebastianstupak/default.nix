@@ -197,7 +197,7 @@
           6
           7
         ];
-        icon = "󰒋"; # server
+        icon = "󰖟"; # globe
         color = "base0E"; # mauve
       };
       bunny = {

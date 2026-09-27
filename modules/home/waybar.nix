@@ -682,7 +682,17 @@ in
         // builtins.listToAttrs (
           map (ws: {
             inherit (ws) name;
-            value = ''<span color="#${colors.${ws.org.color}}">${ws.org.icon}</span>'';
+            # An org's home screen is drawn at full strength and its extra
+            # screens as fainter echoes of the same glyph. Nine chips in a row
+            # at one weight read as nine unrelated things; this makes the eye
+            # group them, so the bar is four groups rather than a stripe.
+            # `alpha` is pango's, applied on top of whatever colour the org
+            # wears — CSS cannot reach an individual workspace here.
+            value =
+              if ws.index == 0 then
+                ''<span color="#${colors.${ws.org.color}}">${ws.org.icon}</span>''
+              else
+                ''<span color="#${colors.${ws.org.color}}" alpha="60%">${ws.org.icon}</span>'';
           }) config.my.orgLauncher.workspaces
         );
 

@@ -78,13 +78,15 @@ let
   # would drift the first time a third screen is added.
   workspaceName = name: index: if index == 0 then name else "${name}-${toString (index + 1)}";
 
-  # Flattened [{ id, name, org }] over every org workspace, in id order. Shared
-  # by the Hyprland rules, the duplicate-id assertion and modules/home/waybar.nix.
+  # Flattened [{ id, name, org, index }] over every org workspace, in id order.
+  # Shared by the Hyprland rules, the duplicate-id assertion and
+  # modules/home/waybar.nix. `index` is the position within the org — 0 is its
+  # home screen — which is what lets the bar group a run of chips visually.
   allWorkspaces = lib.sort (a: b: a.id < b.id) (
     lib.concatMap (
       { name, org }:
       lib.imap0 (index: id: {
-        inherit id org;
+        inherit id org index;
         name = workspaceName name index;
       }) org.workspaces
     ) named
@@ -241,7 +243,7 @@ in
       internal = true;
       type = lib.types.listOf (lib.types.attrsOf lib.types.unspecified);
       description = ''
-        Every org workspace as { id, name, org }, in id order. The bar needs
+        Every org workspace as { id, name, org, index }, in id order. The bar needs
         the same names Hyprland gives these workspaces in order to put the
         right glyph on them; sharing the derived list is what stops the naming
         rule from being written down twice.

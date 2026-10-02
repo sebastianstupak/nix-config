@@ -16,6 +16,7 @@
     ../../modules/nixos/containers.nix # docker
     ../../modules/nixos/netbird.nix # mesh VPN
     ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)
+    ../../modules/nixos/syncthing.nix # peer-to-peer sync (inert until my.syncthing.enable)
     # Pro-audio + Ableton via shibco/ableton-linux. Measured before enabling:
     # 54 derivations built and 587 fetched (917 MiB), of which only
     # ableton-wine and ableton-linkd are real from-source builds — that flake
@@ -55,6 +56,13 @@
     repository = "s3:https://s3.fr-par.scw.cloud/sstupak-restic-backups";
     prune = true;
   };
+
+  # Peer-to-peer sync with my own devices (currently the Boox Note Air 4C,
+  # which carries sheet music as .mscz). No cloud provider and no long-lived
+  # credential on the tablet, which matters for a device that is easy to lose.
+  # Synced folders live under $HOME, so restic above picks them up — Syncthing
+  # replicates deletions, so it is not itself a backup.
+  my.syncthing.enable = true;
 
   networking.hostName = "workstation";
 

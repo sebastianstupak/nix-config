@@ -135,6 +135,24 @@ in
         # prefix (see modules/nixos/audio.nix) precisely so that they fall on
         # the backed-up side of this line.
         "/home/*/.wine-ableton"
+
+        # Boox Note Air 4C device dumps. The EDL tree is ~17 GB of raw
+        # partition images, and every byte of it is already inside
+        # boox-backup-*.tar.zst next to it — same content, 3.4 GB compressed,
+        # sha256 recorded in the runbook. The two do NOT deduplicate against
+        # each other (one is raw, one is zstd), so keeping both would cost the
+        # full 20 GB in the repository for one device backup.
+        #
+        # The archive itself stays backed up, deliberately: Onyx publishes no
+        # firmware for this model, so that file is the only thing that can ever
+        # restore the tablet. It is exactly the kind of irreplaceable artifact
+        # this repository exists for.
+        "/home/*/dev/personal/boox/backups/[0-9]*-[0-9]*-[0-9]*"
+
+        # Scratch from driving the tablet's UI over adb. Contains screenshots
+        # of handwritten notebooks — personal content that should not be
+        # sprayed into a backup as a side effect of debugging.
+        "/home/*/dev/personal/boox/.work"
       ];
 
       timerConfig = {

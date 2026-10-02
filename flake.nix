@@ -53,6 +53,23 @@
     # the same way it does for ableton-linux below.
     herdr.url = "github:herdrdev/herdr/v0.9.1";
 
+    # gathr: the multi-org chat cockpit, written for this machine. Its own repo
+    # so it has its own CI and release history, and so a broken commit there
+    # cannot break this config until the lock is bumped deliberately.
+    #
+    # This one DOES follow our nixpkgs: it is a plain buildGoModule with no
+    # pinned toolchain of its own, so sharing nixpkgs avoids evaluating a second
+    # copy for no benefit.
+    # TEMP(gathr-empty-repo): commented out because github:sebastianstupak/gathr
+    # is currently an empty repository, so this input 409s and the whole flake
+    # refuses to evaluate — nothing can be built at all. Push an initial commit
+    # there, then uncomment this and the two other TEMP(gathr-empty-repo) sites
+    # (modules/home/default.nix, home/sebastianstupak/default.nix).
+    # gathr = {
+    #   url = "github:sebastianstupak/gathr";
+    #   inputs.nixpkgs.follows = "nixpkgs";
+    # };
+
     # Ableton Live + Push on Linux (patched Wine + PipeASIO + Link). Deliberately
     # NOT following our nixpkgs — its patched Wine is built against its own pinned
     # nixos-unstable; forcing follows would break that build. See modules/nixos/audio.nix.

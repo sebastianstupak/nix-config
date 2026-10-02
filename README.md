@@ -32,6 +32,29 @@ org datadir 2       # its second screen
 **[docs/ORGS.md](./docs/ORGS.md)** — how it fits together, adding an org, and
 what a rebuild cannot reproduce on a new machine.
 
+## Sync
+
+Files follow me between this machine and my own devices — currently the Boox
+Note Air 4C, which carries sheet music. Syncthing is peer-to-peer and
+end-to-end encrypted, so no provider holds the data and there is no long-lived
+cloud credential sitting on a tablet that is easy to lose.
+
+```bash
+st                  # this device's ID, its peers, and the synced folders
+st id               # just the ID — what the other device needs to pair
+st gui              # open the web UI (127.0.0.1:8384, loopback only)
+st log [n]          # recent daemon output
+```
+
+`st id` is the one to reach for first: pairing needs this machine's device ID,
+which is otherwise buried in the web UI under Actions → Show ID.
+
+It is **not** a backup — Syncthing replicates deletions faithfully. Backups are
+restic (see below); synced folders live under `$HOME`, so they are covered.
+
+**[docs/SYNC.md](./docs/SYNC.md)** — pairing a new device, folder layout, and
+the conflict behaviour that matters for binary files.
+
 ## Docs
 
 Workflows a human follows. Module comments explain why a line of Nix exists;
@@ -45,6 +68,7 @@ these explain what to do.
 | [docs/GAMING.md](./docs/GAMING.md) | The opt-in gaming slice: Steam/Proton, Lutris, and Minecraft via Prism Launcher |
 | [docs/BACKUP.md](./docs/BACKUP.md) | restic to object storage: what is backed up, restoring, and the several-machines design |
 | [docs/MUSIC.md](./docs/MUSIC.md) | MuseScore and Muse Hub: sound libraries, the audio path, and two things that are not bugs |
+| [docs/SYNC.md](./docs/SYNC.md) | Syncthing: pairing a device, the `st` command, and why this is not a backup |
 
 ## Day-to-day
 
@@ -105,7 +129,7 @@ carries its own copy of that rule and a flake check keeps the two in step.
 |------|---------|
 | `flake.nix` | Inputs, `nixosConfigurations` (via `mkHost`), and the checks above |
 | `hosts/<host>/` | Per-machine config: imports the profiles it needs + hardware config |
-| `modules/nixos/` | System modules: `core` (baseline) + opt-in `desktop`/`stylix`/`laptop`/`containers`/`audio`/`gaming`/`backup`/`netbird` |
+| `modules/nixos/` | System modules: `core` (baseline) + opt-in `desktop`/`stylix`/`laptop`/`containers`/`audio`/`gaming`/`backup`/`netbird`/`syncthing` |
 | `modules/home/` | home-manager modules — shell/cli/terminal/editor, browsers, office, media, music, comms, git, dev, security, hyprland, waybar, notifications, calendar, and the org slice (`orgs`, `org`, `herdr`, `claude-code-profiles`) |
 | `home/<user>/` | Per-user config: identity, calendars, orgs — the data, not the mechanism |
 | `docs/` | Human workflows (see the table above) |
@@ -115,7 +139,7 @@ carries its own copy of that rule and a flake check keeps the two in step.
 
 Own options live under `my.*` and are declared by the module that owns them —
 `my.orgs`, `my.calendars`, `my.claude.profiles`, `my.ableton.enable`,
-`my.gaming.enable`, `my.backup.*`. The values are set in `home/<user>/` or
+`my.gaming.enable`, `my.backup.*`, `my.syncthing.*`. The values are set in `home/<user>/` or
 `hosts/<host>/`, keeping modules about mechanism and those files about this
 person and this machine.
 

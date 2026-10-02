@@ -15,6 +15,9 @@
     ./orgs.nix
     ./org.nix
     ./herdr.nix
+    # TEMP(gathr-empty-repo): reads inputs.gathr, which is commented out in
+    # flake.nix until that repository has a commit.
+    # ./gathr.nix
     ./git.nix
     ./git-hooks.nix
     ./security.nix

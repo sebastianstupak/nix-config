@@ -221,6 +221,20 @@
       };
     };
 
+  # One cockpit over every org's conversations: `gathr` attaches the TUI, a user
+  # service keeps syncing when the terminal closes. Orgs, their glyphs and their
+  # colours are generated from my.orgs above — see modules/home/gathr.nix.
+  #
+  # fixtures stays on until a real platform account exists: with no accounts the
+  # daemon starts on an empty database, which looks identical to a broken
+  # config. Turn it off in the same commit that adds the first real provider.
+  # TEMP(gathr-empty-repo): the module providing these options is not imported
+  # while inputs.gathr is commented out in flake.nix.
+  # my.gathr = {
+  #   enable = true;
+  #   fixtures = true;
+  # };
+
   # Per-user git identity (shared git config lives in modules/home/git.nix).
   programs.git.settings.user = {
     name = "sebastianstupak";

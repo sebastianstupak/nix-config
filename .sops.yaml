@@ -7,6 +7,17 @@
 #                sops.age.sshKeyPaths in modules/nixos/core.nix — so without
 #                this recipient the machine cannot read its own secrets at boot.
 #
+#   workstation_intel  the SECOND physical machine sharing hosts/workstation/
+#                (Intel, SK hynix PC801). Same derivation, different host key.
+#                This recipient is why it can read passwords.yaml at all: the
+#                first install of that machine had only the recipient above, so
+#                hashedPasswordFile never appeared, and update-users-groups.pl
+#                wrote "!" into every shadow entry on each activation — locking
+#                both sebastianstupak and root out with no way back in. If you
+#                ever reinstall either machine, its host key is regenerated:
+#                re-derive the value here and run `sops updatekeys` BEFORE the
+#                first boot, or you will reproduce exactly that lockout.
+#
 #   sebastianstupak  a standalone age key at ~/.config/sops/age/keys.txt, which
 #                    sops finds on its own. Without a second recipient you could
 #                    create a secret and never reopen it: `sops secrets/...`
@@ -28,6 +39,7 @@
 
 keys:
   - &workstation age14q4wp2reca4znhzeljj862kps7h6g4zz5z8ls84jp5m34ha7kd6qy2njex
+  - &workstation_intel age1attpxxmnvhnfrfqgmwt7vtyn4ax9d0274lqzfaymt57zs5894p5s0tck3f
   - &sebastianstupak age16x0azpketkfava5fcfjzvhjrmv43pujsgnyj5x27zlqvsl0d7dmsdqd4mp
 
 creation_rules:
@@ -35,4 +47,5 @@ creation_rules:
     key_groups:
       - age:
           - *workstation
+          - *workstation_intel
           - *sebastianstupak

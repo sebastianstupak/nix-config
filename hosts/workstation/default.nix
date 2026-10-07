@@ -78,6 +78,33 @@
   # stranded. 20 keeps well over a month of rollback targets.
   boot.loader.systemd-boot.configurationLimit = 20;
 
+  # Load whichever KVM module matches this CPU.
+  #
+  # Two machines share this host entry and they differ in CPU vendor, so
+  # boot.kernelModules cannot name the module: listing both leaves
+  # systemd-modules-load permanently failed on whichever machine does not
+  # match, and listing one silently denies hardware virtualisation to the
+  # other. Neither module has a reliable sysfs modalias to autoload from on
+  # this kernel (/sys/devices/system/cpu/cpu0/modalias does not exist), so
+  # probe both and let the wrong one fail harmlessly.
+  #
+  # `|| true` is deliberate: exactly one of these two always fails with ENODEV,
+  # and that is the expected steady state, not an error worth a degraded unit.
+  systemd.services.load-kvm = {
+    description = "Load the KVM module matching this CPU";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "systemd-modules-load.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      ${pkgs.kmod}/bin/modprobe kvm_amd 2>/dev/null \
+        || ${pkgs.kmod}/bin/modprobe kvm_intel 2>/dev/null \
+        || true
+    '';
+  };
+
   # Users are fully declarative: nothing here is created or changed with
   # `useradd`/`passwd`, and anything NOT declared is removed on activation.
   #

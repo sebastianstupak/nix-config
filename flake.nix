@@ -523,16 +523,33 @@
         # months purely because its label stubs happened to match the disk. Fail
         # loudly if one is ever committed again, rather than discovering it the
         # next time a partition is relabelled.
+        # Two machines share hosts/workstation/, so this check guards the two
+        # ways that arrangement silently breaks.
+        #
+        # The UUID requirement here used to be inverted: it demanded by-uuid, on
+        # the reasoning that labels break when a disk is relabelled. That was
+        # right for one machine and wrong for two — a UUID identifies one
+        # specific filesystem, so a shared hardware config addressed by UUID
+        # boots exactly one of them and sends the other into an initrd rescue
+        # shell. Labels are the only stable name both machines can share, and
+        # they are set at mkfs time (docs/INSTALL.md step 3 verifies them).
         hardware-config-is-real = pkgs.runCommand "hardware-config-is-real" { } ''
           hw=${./hosts/workstation/hardware-configuration.nix}
           if grep -q PLACEHOLDER "$hw"; then
             echo "hosts/workstation/hardware-configuration.nix is still the placeholder." >&2
-            echo "Regenerate it ON the machine: nixos-generate-config --show-hardware-config" >&2
+            echo "See docs/INSTALL.md step 5 — merge, do not replace." >&2
             exit 1
           fi
-          if ! grep -q "by-uuid" "$hw"; then
-            echo "hardware-configuration.nix does not address filesystems by UUID." >&2
-            echo "Label- or device-addressed roots break when a disk is relabelled." >&2
+          if ! grep -q "by-label" "$hw"; then
+            echo "hardware-configuration.nix does not address filesystems by LABEL." >&2
+            echo "Two machines share this file; by-label is what lets one config boot both." >&2
+            exit 1
+          fi
+          if grep -q "by-uuid" "$hw"; then
+            echo "hardware-configuration.nix addresses a filesystem by UUID." >&2
+            echo "A UUID names one specific filesystem, so this boots only one of the" >&2
+            echo "two machines. This is almost always generated output copied over the" >&2
+            echo "hand-merged file — see docs/INSTALL.md step 5." >&2
             exit 1
           fi
           touch $out

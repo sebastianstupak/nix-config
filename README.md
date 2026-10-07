@@ -3,7 +3,9 @@
 Personal [NixOS](https://nixos.org) configuration — flake-based, [home-manager](https://github.com/nix-community/home-manager)
 as a NixOS module, secrets via [sops-nix](https://github.com/Mic92/sops-nix).
 
-- **Host:** `workstation` (HP laptop, daily driver)
+- **Host:** `workstation` — one host entry, **two physical machines**: the AMD HP
+  laptop (daily driver) and an Intel SK hynix machine. They share the hostname,
+  the hardware config, and every module; see [Two machines](#two-machines).
 - **User:** `sebastianstupak`
 - **Channel:** `nixos-26.05`
 - **Desktop:** Hyprland (Wayland) · greetd + tuigreet · waybar
@@ -54,6 +56,36 @@ restic (see below); synced folders live under `$HOME`, so they are covered.
 
 **[docs/SYNC.md](./docs/SYNC.md)** — pairing a new device, folder layout, and
 the conflict behaviour that matters for binary files.
+
+## Two machines
+
+`hosts/workstation/` is deliberately shared by two physical machines rather than
+split into separate host entries. They differ in CPU vendor and in storage
+controller, so four things in the config exist purely to let one entry boot both:
+
+| What | Where | Why |
+|------|-------|-----|
+| `by-label` mounts | `hosts/workstation/hardware-configuration.nix` | UUIDs are per-filesystem and differ between the machines; labels are set identically at `mkfs` time (`-L nixos`, `-n BOOT`) |
+| Union of initrd modules | same file | `nvme`/`xhci_pci` on both, plus `thunderbolt`/`uas`/`sd_mod` for the Intel machine. Dropping one makes that machine fail to find its root device |
+| Both AMD *and* Intel microcode | same file | each option is inert on the CPU it doesn't match; leaving only AMD means the Intel machine silently gets no microcode updates |
+| `systemd.services.load-kvm` | `hosts/workstation/default.nix` | the right `kvm` module differs per CPU and can't be chosen at eval time. Naming both in `boot.kernelModules` would leave `systemd-modules-load` permanently failed on whichever machine doesn't match |
+
+Plus one recipient per machine in `.sops.yaml` — see
+[`secrets/README.md`](./secrets/README.md).
+
+**The costs, which are real:**
+
+- **`hardware-configuration.nix` is hand-merged, not generated.** Running
+  `nixos-generate-config --show-hardware-config` over it destroys the merge and
+  leaves the *other* machine unbootable. The file says so at the top.
+- **The two machines are indistinguishable to the config.** Same hostname, same
+  modules — so you cannot enable something on only one of them (SSH access, a
+  different GPU driver, per-machine power tuning).
+- **Labels collide.** If both disks are ever in one machine, the initrd may pick
+  the wrong root. Mount the other machine's disk by UUID explicitly.
+
+If any of those start to bite, the fix is to split into `hosts/<name>/` with its
+own hostname, hardware config, and sops recipient.
 
 ## Docs
 

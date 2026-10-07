@@ -1,9 +1,12 @@
 # AGENTS.md
 
 Guidance for AI agents (and humans) working in this repository. This is a
-**flake-based NixOS configuration** for a single laptop daily-driver
-(host `workstation`, user `sebastianstupak`). Keep changes small, formatted, and
-committed. Follow the rules below exactly.
+**flake-based NixOS configuration** for **two physical machines sharing one host
+entry** (host `workstation`, user `sebastianstupak`): an AMD HP laptop (daily
+driver) and an Intel SK hynix machine. They share the hostname and every module,
+so a change to `hosts/workstation/` affects both and nothing can be enabled on
+only one of them. See README "Two machines" and rule 7 below. Keep changes
+small, formatted, and committed. Follow the rules below exactly.
 
 ## Commands
 
@@ -59,15 +62,19 @@ version the *running system* — use both.
    committed; edit them via `sops`. See `secrets/README.md`.
 6. **Do not run `nixos-rebuild switch` unprompted.** Propose the change and let
    the human apply it. `nixos-rebuild build` for verification is fine.
-7. **`hardware-configuration.nix` is generated, not written.** It now holds the
-   real hardware for `workstation` (UUID-addressed filesystems, the actual initrd
-   modules). Regenerate it **on that machine** with
-   `nixos-generate-config --show-hardware-config` — no sudo needed — and commit
-   the result. Never hand-edit it: anything you chose deliberately belongs in
-   `hosts/<host>/default.nix` or a module, or the next regeneration silently
-   drops it. `statix.toml` skips linting it, but `nix fmt` still formats it and
-   the `formatting` check still requires that, so run `nix fmt` after
-   regenerating. Drop the generator's unused `pkgs` argument, which
+7. **`hardware-configuration.nix` is HAND-MERGED — never regenerate over it.**
+   Two physical machines share `hosts/workstation/` (AMD HP laptop + Intel SK
+   hynix), so this file is the *union* of both: `by-label` filesystems, both
+   machines' initrd modules, both CPU vendors' microcode. Running
+   `nixos-generate-config --show-hardware-config > …` over it describes only the
+   machine you ran it on and leaves the other unbootable. The
+   `hardware-config-is-real` check fails on `by-uuid` for exactly this reason.
+   To add hardware for a machine, generate to a scratch path and merge in only
+   what is missing — see `docs/INSTALL.md` step 5. Anything you chose
+   deliberately still belongs in `hosts/<host>/default.nix` or a module.
+   `statix.toml` skips linting it, but `nix fmt` still formats it and the
+   `formatting` check still requires that, so run `nix fmt` after editing.
+   Drop the generator's unused `pkgs` argument, which
    `deadnix --fail` rejects in the pre-commit hook.
 
 ## Project structure
@@ -83,7 +90,7 @@ scripts/                      helper scripts (commit-msg.sh: Conventional Commit
 .sops.yaml                    sops recipients + creation rules
 hosts/<host>/
   default.nix                 Per-machine config; imports the profiles it needs + home-manager
-  hardware-configuration.nix  Machine-specific; regenerated on the host, committed
+  hardware-configuration.nix  Hand-merged union of BOTH machines (see rule 7) — never regenerate over it
 modules/nixos/                System modules — core (baseline, always imported via default.nix)
                               + opt-in profiles: desktop (Hyprland), stylix (theming),
                               laptop (power/bt/fw), containers (docker),

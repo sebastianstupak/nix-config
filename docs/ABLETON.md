@@ -49,7 +49,7 @@ grep -o threadirqs /proc/cmdline && lsmod | grep ntsync
 | packages | the Ableton runtime, plus `ableton-install` |
 
 Realtime limits need the user in the `audio` group, and `security.rtkit.enable`
-(set in `desktop.nix`). Both are already true on `workstation`.
+(set in `desktop.nix`). Both are already true on each host.
 
 ## The two halves: what is reproducible and what is not
 

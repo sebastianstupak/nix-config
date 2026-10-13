@@ -1,6 +1,6 @@
 # Everything both machines share.
 #
-# Split out of hosts/workstation/ when the second machine stopped being able to
+# Split out of hosts/zagreus/ when the second machine stopped being able to
 # share one host entry. A single nixosConfiguration can only produce one
 # `networking.hostName` and one `hashedPasswordFile`, and Nix cannot branch on
 # which machine is evaluating it — so per-machine identity and per-machine

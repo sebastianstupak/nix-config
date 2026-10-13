@@ -2,7 +2,7 @@
 #
 # `osConfig` is the NixOS-level config of the host this profile is attached to.
 # home-manager passes it whenever it runs as a NixOS module, which is how this
-# file reads the sops secret paths declared in hosts/workstation/default.nix
+# file reads the sops secret paths declared in hosts/zagreus/default.nix
 # instead of repeating "/run/secrets/..." literals that nothing would check.
 { osConfig, ... }:
 {
@@ -30,7 +30,7 @@
   # ~/.config/vdirsyncer/<name>-url. That default needs a manual step per machine
   # that no rebuild can reproduce, so a reinstall silently loses both feeds and
   # the bar's meeting counter goes quiet. Encrypted in git, they survive it.
-  # A new calendar needs a matching secret in hosts/workstation/default.nix.
+  # A new calendar needs a matching secret in hosts/zagreus/default.nix.
   # One group per bar counter, each holding as many feeds as it needs. Feed names
   # are prefixed with where they come from, because that is the thing you need to
   # know when one of them stops updating — and the name is what shows up in
@@ -38,7 +38,7 @@
   # the hover when a group has more than one feed.
   #
   # Adding a feed: a key in secrets/common/calendars.yaml, a matching `sops.secrets`
-  # entry in hosts/workstation/default.nix, and a line here. Distinct icons are
+  # entry in hosts/zagreus/default.nix, and a line here. Distinct icons are
   # the point of splitting the counts — two 󰃭 chips would be a puzzle — and both
   # of these are covered by JetBrainsMono NF (`fc-list ':charset=f00d6'`).
   my.calendars = {

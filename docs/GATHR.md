@@ -89,8 +89,8 @@ and invented conversations are never mixed in one list.
 ### 5. Apply and check
 
 ```bash
-nixos-rebuild build --flake .#workstation    # verify first
-sudo nixos-rebuild switch --flake .#workstation
+nixos-rebuild build --flake .#zagreus    # verify first
+sudo nixos-rebuild switch --flake .#zagreus
 systemctl --user restart gathr
 journalctl --user -u gathr -n 20
 ```

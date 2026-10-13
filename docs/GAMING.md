@@ -1,6 +1,6 @@
 # Gaming
 
-An opt-in slice: `my.gaming.enable = true` in `hosts/workstation/default.nix`,
+An opt-in slice: `my.gaming.enable = true` in `hosts/zagreus/default.nix`,
 implemented in `modules/nixos/gaming.nix`. Importing the module does nothing on
 its own.
 
@@ -143,7 +143,7 @@ For Epic or GOG storefront integration, add `heroic` to the package list in
 ## Turning it off
 
 ```nix
-my.gaming.enable = false;   # hosts/workstation/default.nix
+my.gaming.enable = false;   # hosts/zagreus/default.nix
 ```
 
 That removes Steam, the 32-bit graphics stack and the rest on the next rebuild.

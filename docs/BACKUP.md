@@ -1,7 +1,7 @@
 # Backups
 
 restic to Scaleway Object Storage, from `modules/nixos/backup.nix`. Inert until
-`my.backup.repository` is set; it is set for `workstation` in its host file.
+`my.backup.repository` is set; it is set in `hosts/common/` for both machines.
 
 ```
 repository   s3:https://s3.fr-par.scw.cloud/sstupak-restic-backups
@@ -42,7 +42,7 @@ does not age out another's history.
 
 **Exactly one host prunes.** `prune` takes an exclusive lock on the repository;
 several machines pruning daily would collide and the losers would fail their
-timers — a red indicator every morning that means nothing. `workstation` owns
+timers — a red indicator every morning that means nothing. `zagreus` owns
 it via `my.backup.prune = true`. Every other host leaves it off, which is the
 default, so adding a machine is safe by construction.
 

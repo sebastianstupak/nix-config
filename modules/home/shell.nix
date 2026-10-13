@@ -18,8 +18,8 @@
       la = "eza -la --git --icons";
       cat = "bat";
       # Rebuild helpers for this repo (run from the repo root).
-      rebuild = "sudo nixos-rebuild switch --flake .#workstation";
-      rebuild-boot = "sudo nixos-rebuild boot --flake .#workstation";
+      rebuild = "sudo nixos-rebuild switch --flake .#zagreus";
+      rebuild-boot = "sudo nixos-rebuild boot --flake .#zagreus";
     };
 
     # Tab accepts the grey zsh-autosuggestions ghost text (upstream only binds

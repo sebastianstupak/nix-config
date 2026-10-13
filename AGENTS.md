@@ -6,8 +6,8 @@ each**, user `sebastianstupak`:
 
 | host | machine | notes |
 | --- | --- | --- |
-| `workstation` | AMD HP laptop, daily driver | prunes the restic repository |
-| `desktop` | Intel, SK hynix PC801 | backs up, expires nothing |
+| `zagreus` | AMD HP laptop, daily driver | prunes the restic repository |
+| `hestia` | HP ZBook Firefly 14 G10, Intel i7-1355U | backs up, expires nothing |
 
 Both import `hosts/common/`, which holds every module and all shared settings —
 so a change there affects both machines. A host entry holds only what
@@ -21,22 +21,22 @@ changes small, formatted, and committed. Follow the rules below exactly.
 
 ## Commands
 
-All commands run from the repo root. `<host>` is `workstation`.
+All commands run from the repo root. `<host>` is `zagreus` or `hestia`.
 
 ```bash
 # Apply config: build + activate + set as boot default (needs root).
 # USE THIS MACHINE'S HOST — they are no longer the same entry.
-sudo nixos-rebuild switch --flake .#workstation   # the AMD HP laptop
-sudo nixos-rebuild switch --flake .#desktop       # the Intel machine
+sudo nixos-rebuild switch --flake .#zagreus   # the AMD HP laptop
+sudo nixos-rebuild switch --flake .#hestia       # the Intel machine
 
 # Stage for next boot only — safer for risky changes (kernel, bootloader, FS)
-sudo nixos-rebuild boot --flake .#workstation
+sudo nixos-rebuild boot --flake .#zagreus
 
 # Build WITHOUT activating — the dry test to run after editing
-nixos-rebuild build --flake .#workstation
+nixos-rebuild build --flake .#zagreus
 
 # Verbose errors when evaluation fails
-sudo nixos-rebuild switch --flake .#workstation --show-trace
+sudo nixos-rebuild switch --flake .#zagreus --show-trace
 
 # Validate the flake (eval + checks, incl. formatting). Run before committing.
 nix flake check
@@ -76,7 +76,7 @@ version the *running system* — use both.
 6. **Do not run `nixos-rebuild switch` unprompted.** Propose the change and let
    the human apply it. `nixos-rebuild build` for verification is fine.
 7. **`hardware-configuration.nix` is HAND-MERGED — never regenerate over it.**
-   Two physical machines share `hosts/workstation/` (AMD HP laptop + Intel SK
+   Two physical machines share `hosts/zagreus/` (AMD HP laptop + Intel SK
    hynix), so this file is the *union* of both: `by-label` filesystems, both
    machines' initrd modules, both CPU vendors' microcode. Running
    `nixos-generate-config --show-hardware-config > …` over it describes only the
@@ -200,10 +200,10 @@ Commit messages follow **Conventional Commits** (enforced by the commit-msg hook
 
 - **types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
   `ci`, `chore`, `revert`. `!` marks a breaking change. Subject ≤ 72 chars.
-- **scope** is optional; use the area touched — e.g. `(home)`, `(workstation)`,
+- **scope** is optional; use the area touched — e.g. `(home)`, `(hosts)`,
   `(modules/nixos)`, `(secrets)`, `(flake)`.
 - Examples: `feat(home): add zsh with starship prompt` ·
-  `fix(workstation): correct EFI mount point` · `chore: nix flake update`.
+  `fix(zagreus): correct EFI mount point` · `chore: nix flake update`.
 - Small, atomic commits; one logical change each. Commit **before** you `switch`
   so a good generation maps to a known commit.
 - Lockfile bumps are standalone commits (rule 4) — e.g. `chore: nix flake update`.
@@ -216,8 +216,8 @@ Agents cannot boot this machine. To verify without applying:
 
 ```bash
 nix flake check                              # eval + formatting
-nixos-rebuild build --flake .#workstation    # full build, no activation
-nixos-rebuild build --flake .#desktop        # the other machine — check BOTH
+nixos-rebuild build --flake .#zagreus    # full build, no activation
+nixos-rebuild build --flake .#hestia        # the other machine — check BOTH
 ```
 
 Report the actual output. If a build fails, include the error (add `--show-trace`)

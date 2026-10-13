@@ -43,4 +43,4 @@ jobs:
         # the closure for no reason.
         run: |
           nix build --print-build-logs --no-link \
-            '.#nixosConfigurations.workstation.config.system.build.toplevel'
+            '.#nixosConfigurations.zagreus.config.system.build.toplevel'

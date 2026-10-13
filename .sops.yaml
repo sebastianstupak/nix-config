@@ -1,16 +1,19 @@
 # sops-nix creation rules. See secrets/README.md for the full workflow.
 #
-# Secrets are encrypted to TWO age recipients, and both are required:
+# Three age recipients. Which of them a file gets depends on its path — see
+# the creation rules at the bottom.
 #
-#   workstation  derived from the HOST key /etc/ssh/ssh_host_ed25519_key.
-#                sops-nix decrypts as root during activation, using
-#                sops.age.sshKeyPaths in modules/nixos/core.nix — so without
-#                this recipient the machine cannot read its own secrets at boot.
+#   zagreus      derived from the HOST key /etc/ssh/ssh_host_ed25519_key on the
+#                AMD HP laptop. sops-nix decrypts as root during activation,
+#                using sops.age.sshKeyPaths in modules/nixos/core.nix — so
+#                without its recipient a machine cannot read its own secrets at
+#                boot.
 #
-#   desktop      the Intel machine (SK hynix PC801), which used to boot
-#                hosts/workstation/ and now has hosts/desktop/. Same
-#                derivation, different host key. Called `workstation_intel`
-#                until it got a host entry and a hostname of its own.
+#   hestia       the HP ZBook Firefly 14 G10 (Intel i7-1355U), which used to
+#                boot the shared `workstation` entry and now has hosts/hestia/.
+#                Same derivation, different host key. This anchor was called
+#                `workstation_intel` until the machine got a name of its own;
+#                renaming an anchor changes no key material.
 #                This recipient is why it can read passwords.yaml at all: the
 #                first install of that machine had only the recipient above, so
 #                hashedPasswordFile never appeared, and update-users-groups.pl
@@ -40,8 +43,8 @@
 # Create/edit an encrypted file with:  sops secrets/secrets.yaml
 
 keys:
-  - &workstation age14q4wp2reca4znhzeljj862kps7h6g4zz5z8ls84jp5m34ha7kd6qy2njex
-  - &desktop age1attpxxmnvhnfrfqgmwt7vtyn4ax9d0274lqzfaymt57zs5894p5s0tck3f
+  - &zagreus age14q4wp2reca4znhzeljj862kps7h6g4zz5z8ls84jp5m34ha7kd6qy2njex
+  - &hestia age1attpxxmnvhnfrfqgmwt7vtyn4ax9d0274lqzfaymt57zs5894p5s0tck3f
   - &sebastianstupak age16x0azpketkfava5fcfjzvhjrmv43pujsgnyj5x27zlqvsl0d7dmsdqd4mp
 
 # Ordered, and ORDER MATTERS: sops takes the FIRST matching rule, so the
@@ -57,23 +60,23 @@ keys:
 # secrets/common/ stays readable by every machine, because it has to be: the
 # restic credentials are used by all of them.
 creation_rules:
-  - path_regex: secrets/workstation/[^/]+\.(yaml|json|env|ini)$
+  - path_regex: secrets/zagreus/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
-          - *workstation
+          - *zagreus
           - *sebastianstupak
 
-  - path_regex: secrets/desktop/[^/]+\.(yaml|json|env|ini)$
+  - path_regex: secrets/hestia/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
-          - *desktop
+          - *hestia
           - *sebastianstupak
 
   - path_regex: secrets/common/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
-          - *workstation
-          - *desktop
+          - *zagreus
+          - *hestia
           - *sebastianstupak
 
   # Catch-all for a file dropped straight into secrets/. Encrypted to
@@ -82,6 +85,6 @@ creation_rules:
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
-          - *workstation
-          - *desktop
+          - *zagreus
+          - *hestia
           - *sebastianstupak

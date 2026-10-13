@@ -1,4 +1,4 @@
-# workstation — the AMD HP laptop, daily driver.
+# zagreus — the AMD HP laptop, daily driver.
 #
 # Everything shared with the other machine is in ../common. What is here is
 # only what distinguishes this one: its name, its password, and the fact that
@@ -7,7 +7,7 @@
 {
   imports = [ ../common ];
 
-  networking.hostName = "workstation";
+  networking.hostName = "zagreus";
 
   # THE ONE MACHINE THAT PRUNES.
   #
@@ -20,7 +20,7 @@
   # This host's login password.
   #
   # STILL THE SHARED FILE, and deliberately so. The per-host layout and the
-  # .sops.yaml rules for secrets/workstation/ are in place, but splitting the
+  # .sops.yaml rules for secrets/zagreus/ are in place, but splitting the
   # hash means creating a new encrypted file, and a file this option points at
   # that cannot be decrypted locks root and this user out on the next
   # activation — see "The lockout" in secrets/README.md. So the split is a

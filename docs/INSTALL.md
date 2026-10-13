@@ -1,5 +1,9 @@
 # Installing this config from scratch (wipe → NixOS)
 
+> `<host>` below is the machine you are installing: **`zagreus`** (AMD HP
+> laptop) or **`hestia`** (HP ZBook Firefly 14 G10). They have one host entry
+> each — pick the right one or you will give a machine the other's hostname.
+
 Step-by-step for putting NixOS + this flake on either machine, **erasing the whole
 disk** (no dual-boot). Read the whole thing once before you start. Commands assume
 a UEFI machine and an NVMe disk at `/dev/nvme0n1` — **confirm your disk with
@@ -13,7 +17,7 @@ a UEFI machine and an NVMe disk at `/dev/nvme0n1` — **confirm your disk with
 >    install has a fresh host key, which cannot decrypt it, and
 >    `users.mutableUsers = false` then locks every account. `passwd` cannot fix
 >    this afterwards — see "The lockout" in [`secrets/README.md`](../secrets/README.md).
-> 2. **Do not overwrite `hosts/workstation/hardware-configuration.nix` with
+> 2. **Do not overwrite `hosts/zagreus/hardware-configuration.nix` with
 >    generated output** (step 5). Two machines share it and it is hand-merged;
 >    replacing it leaves the other machine unbootable.
 
@@ -134,7 +138,7 @@ cd nix-config
 ```
 
 > ⚠️ **Do not `cp` the generated file over
-> `hosts/workstation/hardware-configuration.nix`.** Two machines share that file
+> `hosts/zagreus/hardware-configuration.nix`.** Two machines share that file
 > and it is hand-merged. Overwriting it points the *other* machine at disks it
 > does not have, and that machine stops booting on its next rebuild.
 
@@ -149,12 +153,12 @@ genuinely missing:
   replacement.
 - **`hardware.cpu.<vendor>.updateMicrocode`** — both vendors are already there.
 - **`boot.kernelModules`** — leave empty. KVM is handled by
-  `systemd.services.load-kvm` in `hosts/workstation/default.nix`.
+  `systemd.services.load-kvm` in `hosts/zagreus/default.nix`.
 
 If you changed anything, stage it:
 
 ```bash
-git add hosts/workstation/hardware-configuration.nix   # REQUIRED: flakes ignore untracked files
+git add hosts/zagreus/hardware-configuration.nix   # REQUIRED: flakes ignore untracked files
 ```
 
 > The `git add` is not optional — Nix only sees files tracked by git, so an
@@ -212,14 +216,14 @@ remove the audio line, install, boot, then add it back and rebuild (possibly
 overnight, or after checking the project's README for a Cachix binary cache):
 
 ```bash
-# edit hosts/workstation/default.nix and comment out this import for now:
+# edit hosts/zagreus/default.nix and comment out this import for now:
 #   ../../modules/nixos/audio.nix
 ```
 
 ## 7. Install
 
 ```bash
-nixos-install --flake /mnt/etc/nixos/nix-config#workstation --no-root-password
+nixos-install --flake /mnt/etc/nixos/nix-config#<host> --no-root-password
 ```
 
 `--no-root-password` is correct here: `root` is not declared in this config, so
@@ -300,7 +304,7 @@ direnv allow          # nix-direnv loads the dev shell and sets core.hooksPath
 **Apply future changes** (a `rebuild` alias is configured):
 
 ```bash
-sudo nixos-rebuild switch --flake ~/nix-config#workstation
+sudo nixos-rebuild switch --flake ~/nix-config#<host>
 # rollback a bad change:
 sudo nixos-rebuild switch --rollback
 ```
@@ -313,7 +317,7 @@ once more**:
 ```bash
 ssh-keygen -t ed25519 -C "you@example.com"     # no passphrase is fine; an agent holds it
 gh auth login                                   # then: gh ssh-key add ~/.ssh/id_ed25519.pub
-sudo nixos-rebuild switch --flake ~/nix-config#workstation
+sudo nixos-rebuild switch --flake ~/nix-config#<host>
 ```
 
 That last rebuild is the part that is easy to skip and hard to notice. Git's
@@ -380,7 +384,7 @@ Install your Windows VSTs into that same wineprefix. Expect DRM caveats
 - **Build error mentions "path does not exist":** you added a file but didn't
   `git add` it (see step 5).
 - **`nixos-rebuild` fails with `seq` / "evaluating a branch condition" noise:**
-  check the flake path actually exists. Pointing `--flake ~/nix-config#workstation`
+  check the flake path actually exists. Pointing `--flake ~/nix-config#<host>`
   at a directory that isn't there produces exactly this.
 - **Graphics:** the AMD machine works out of the box with `hardware.graphics`; so
   does the Intel one. NVIDIA would need a module that doesn't exist yet.

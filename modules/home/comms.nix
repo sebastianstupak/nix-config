@@ -16,7 +16,7 @@
     # recording because it is the part people go looking for:
     #
     #   camera  — the HP HD Camera is a plain UVC device at /dev/video0 and the
-    #             user is in the `video` group (hosts/workstation/default.nix).
+    #             user is in the `video` group (hosts/zagreus/default.nix).
     #             Electron opens it directly through V4L2; no portal involved.
     #             Note the device exposes TWO nodes, /dev/video0 (capture) and
     #             /dev/video1 (metadata) — only the first one produces frames,

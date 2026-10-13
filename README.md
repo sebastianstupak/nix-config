@@ -3,9 +3,10 @@
 Personal [NixOS](https://nixos.org) configuration — flake-based, [home-manager](https://github.com/nix-community/home-manager)
 as a NixOS module, secrets via [sops-nix](https://github.com/Mic92/sops-nix).
 
-- **Hosts:** `workstation` (AMD HP laptop, daily driver) and `desktop` (Intel,
-  SK hynix PC801). One entry each, both importing `hosts/common/`; they still
-  share the hand-merged hardware config. See [Two machines](#two-machines).
+- **Hosts:** `zagreus` (AMD HP laptop, daily driver) and `hestia` (HP ZBook
+  Firefly 14 G10, Intel i7-1355U). One entry each, both importing
+  `hosts/common/`; they still share the hand-merged hardware config. See
+  [Two machines](#two-machines).
 - **User:** `sebastianstupak`
 - **Channel:** `nixos-26.05`
 - **Desktop:** Hyprland (Wayland) · greetd + tuigreet · waybar
@@ -62,10 +63,10 @@ the conflict behaviour that matters for binary files.
 Two physical machines, **one host entry each**, both importing
 `hosts/common/`. A host entry holds only what distinguishes the machine:
 
-| | `workstation` | `desktop` |
+| | `zagreus` | `hestia` |
 |---|---|---|
-| machine | AMD HP laptop, daily driver | Intel, SK hynix PC801 |
-| hostname | `workstation` | `desktop` |
+| machine | AMD HP laptop, daily driver | HP ZBook Firefly 14 G10, Intel i7-1355U |
+| hostname | `zagreus` | `hestia` |
 | restic | backs up **and prunes** | backs up, expires nothing |
 | password secret | `secrets/common/passwords.yaml` | `secrets/common/passwords.yaml` |
 
@@ -78,9 +79,12 @@ hosts.
 Splitting fixed a real bug on the way. `my.backup.prune` was set in the shared
 entry, so **both** machines pruned the shared repository — and pruning takes an
 exclusive lock, which the module's own comment says has to be exactly one of
-them. It now lives on `workstation` alone. Snapshot grouping was wrong for the
+them. It now lives on `zagreus` alone. Snapshot grouping was wrong for the
 same reason: `forget --group-by host` groups by hostname, and both machines
-answered to `workstation`, so each was ageing out the other's history.
+answered to `workstation`, so each was ageing out the other's history. Those
+old snapshots stay in the retired `workstation` group and are no longer covered
+by either machine's retention — forget them by hand once the new groups look
+right.
 
 ### Still shared, deliberately
 
@@ -119,8 +123,8 @@ turn and compare against the union.
 
 ```
 secrets/common/      → both host keys + your age key   (restic creds must be readable by all)
-secrets/workstation/ → that host key + your age key
-secrets/desktop/     → that host key + your age key
+secrets/zagreus/ → that host key + your age key
+secrets/hestia/     → that host key + your age key
 ```
 
 A host directory excludes the other machines on purpose: a stolen laptop can
@@ -147,8 +151,8 @@ these explain what to do.
 ## Day-to-day
 
 ```bash
-sudo nixos-rebuild switch --flake .#workstation   # apply changes
-nixos-rebuild build --flake .#workstation         # build without activating
+sudo nixos-rebuild switch --flake .#zagreus   # apply changes
+nixos-rebuild build --flake .#zagreus         # build without activating
 nix fmt                                            # format before committing
 nix flake check                                    # validate
 nix flake update                                   # update inputs (own commit!)

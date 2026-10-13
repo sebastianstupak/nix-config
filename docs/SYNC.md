@@ -39,7 +39,7 @@ something to expose on a laptop that joins untrusted networks. From elsewhere,
 tunnel it:
 
 ```bash
-ssh -L 8384:127.0.0.1:8384 workstation
+ssh -L 8384:127.0.0.1:8384 zagreus
 ```
 
 ## Firewall

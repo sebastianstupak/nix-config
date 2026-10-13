@@ -1,4 +1,4 @@
-# Machine-specific hardware for host "workstation" — HAND-MERGED, not generated.
+# Hardware shared by BOTH machines (zagreus, hestia) — HAND-MERGED, not generated.
 #
 # IMPORTANT: this file is no longer raw `nixos-generate-config` output. Two
 # physical machines share this one host entry, so it is the union of both:
@@ -11,7 +11,7 @@
 # unbootable. If you ever want generated output back, split the hosts first
 # (hosts/<name>/) and give each its own copy.
 #
-# Everything you actually chose still belongs in hosts/workstation/default.nix
+# Everything you actually chose still belongs in hosts/zagreus/default.nix
 # or a module — this file is only "what hardware is present".
 #
 # Deliberate deviations from raw generator output:
@@ -22,7 +22,7 @@
 #   - filesystems are addressed by LABEL rather than UUID (see below);
 #   - initrd modules are the union of both machines' generated lists;
 #   - boot.kernelModules is empty and KVM is loaded at runtime from
-#     hosts/workstation/default.nix, because the correct module differs per CPU.
+#     hosts/zagreus/default.nix, because the correct module differs per CPU.
 {
   config,
   lib,
@@ -50,7 +50,7 @@
   # vendor at evaluation time. Listing both would leave systemd-modules-load
   # permanently failed on whichever machine does not match, so the matching
   # module is probed at runtime instead — see systemd.services.load-kvm in
-  # hosts/workstation/default.nix.
+  # hosts/zagreus/default.nix.
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 

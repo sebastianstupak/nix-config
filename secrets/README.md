@@ -10,8 +10,8 @@ by who may read them:
 
 ```
 secrets/common/      every machine + you   calendars.yaml, backup.yaml, passwords.yaml
-secrets/workstation/ that machine + you    (empty until you split the password)
-secrets/desktop/     that machine + you    (empty until you split the password)
+secrets/zagreus/ that machine + you    (empty until you split the password)
+secrets/hestia/     that machine + you    (empty until you split the password)
 ```
 
 `secrets/common/` has to stay readable by every machine — the restic
@@ -31,8 +31,8 @@ needed:
 
 | recipient | source | why |
 | --- | --- | --- |
-| `workstation` | host key `/etc/ssh/ssh_host_ed25519_key` on the AMD HP laptop | sops-nix decrypts as root at activation (`sops.age.sshKeyPaths`, `modules/nixos/core.nix`). Without it the machine cannot read its own secrets at boot. |
-| `desktop` | host key of the Intel machine (SK hynix PC801) | same mechanism, different host key. Was called `workstation_intel` while it booted `hosts/workstation/`; renamed when it got `hosts/desktop/`. The key material did not change — the anchor is just a name. |
+| `zagreus` | host key `/etc/ssh/ssh_host_ed25519_key` on the AMD HP laptop | sops-nix decrypts as root at activation (`sops.age.sshKeyPaths`, `modules/nixos/core.nix`). Without it the machine cannot read its own secrets at boot. |
+| `desktop` | host key of the Intel machine (SK hynix PC801) | same mechanism, different host key. Was called `workstation_intel` while it booted `hosts/zagreus/`; renamed when it got `hosts/hestia/`. The key material did not change — the anchor is just a name. |
 | `sebastianstupak` | standalone age key `~/.config/sops/age/keys.txt` | `sops` runs as you and cannot read the root-owned host key. Without it you could create a secret and never reopen it. |
 
 ### The lockout
@@ -91,7 +91,7 @@ with:
 ```bash
 # 1. Create the file. The creation rule encrypts it to THIS host and to you,
 #    and to nothing else.
-sops secrets/desktop/passwords.yaml          # or secrets/workstation/...
+sops secrets/hestia/passwords.yaml          # or secrets/zagreus/...
 
 #    Put a hash in it, generated however you like:
 #      mkpasswd -m yescrypt
@@ -99,14 +99,14 @@ sops secrets/desktop/passwords.yaml          # or secrets/workstation/...
 
 # 2. PROVE you can read it back before anything depends on it. If this fails,
 #    stop — repointing the host now would lock you out on the next activation.
-sops -d secrets/desktop/passwords.yaml
-sudo nix run nixpkgs#sops -- -d secrets/desktop/passwords.yaml   # as root, via the host key
+sops -d secrets/hestia/passwords.yaml
+sudo nix run nixpkgs#sops -- -d secrets/hestia/passwords.yaml   # as root, via the host key
 
 # 3. Only then repoint the host and rebuild.
-#      hosts/desktop/default.nix:  sopsFile = ../../secrets/desktop/passwords.yaml;
+#      hosts/hestia/default.nix:  sopsFile = ../../secrets/hestia/passwords.yaml;
 git add -A
-nixos-rebuild build --flake .#desktop
-sudo nixos-rebuild switch --flake .#desktop
+nixos-rebuild build --flake .#hestia
+sudo nixos-rebuild switch --flake .#hestia
 ```
 
 Keep a rollback target handy: `sudo nixos-rebuild switch --rollback` restores

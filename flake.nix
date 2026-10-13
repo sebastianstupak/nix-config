@@ -112,9 +112,9 @@
     in
     {
       nixosConfigurations = {
-        # nixos-rebuild switch --flake .#workstation
-        workstation = mkHost ./hosts/workstation; # AMD HP laptop
-        desktop = mkHost ./hosts/desktop; # Intel, SK hynix PC801
+        # nixos-rebuild switch --flake .#zagreus
+        zagreus = mkHost ./hosts/zagreus; # AMD HP laptop
+        hestia = mkHost ./hosts/hestia; # Intel, SK hynix PC801
       };
 
       # `nix fmt` — format the whole tree with nixfmt-rfc-style.
@@ -135,7 +135,7 @@
               export HOME="$TMPDIR"
               export XDG_RUNTIME_DIR="$TMPDIR"
               Hyprland --config ${
-                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.conf".source
+                self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak.xdg.configFile."hypr/hyprland.conf".source
               } --verify-config
               touch $out
             '';
@@ -147,7 +147,7 @@
           export HOME="$TMPDIR"
           export XDG_RUNTIME_DIR="$TMPDIR"
           fuzzel --config ${
-            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."fuzzel/fuzzel.ini".source
+            self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak.xdg.configFile."fuzzel/fuzzel.ini".source
           } --check-config
           touch $out
         '';
@@ -160,7 +160,7 @@
         # second terminal on every `org <name>`.
         org-terminal-class =
           let
-            hm = self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak;
+            hm = self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak;
           in
           pkgs.runCommand "org-terminal-class-check"
             {
@@ -195,7 +195,7 @@
         # passthrough scan and the generated case arms — is the part that breaks.
         herdr-org-sessions =
           let
-            hm = self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak;
+            hm = self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak;
             inherit (nixpkgs) lib;
           in
           pkgs.runCommand "herdr-org-sessions-test" { nativeBuildInputs = [ pkgs.gnused ]; } ''
@@ -250,7 +250,7 @@
             ''
               export HOME="$TMPDIR"
               hooks="${
-                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."git/hooks/commit-msg".source
+                self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak.xdg.configFile."git/hooks/commit-msg".source
               }"
 
               git config --global user.email t@example.com
@@ -465,7 +465,7 @@
         # warning and carries on.
         waybar-config = pkgs.runCommand "waybar-check-config" { nativeBuildInputs = [ pkgs.python3 ]; } ''
           python3 - "${
-            self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/config".source
+            self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/config".source
           }" <<'PY'
           import json, sys
 
@@ -523,7 +523,7 @@
         # months purely because its label stubs happened to match the disk. Fail
         # loudly if one is ever committed again, rather than discovering it the
         # next time a partition is relabelled.
-        # Two machines share hosts/workstation/, so this check guards the two
+        # Two machines share hosts/zagreus/, so this check guards the two
         # ways that arrangement silently breaks.
         #
         # The UUID requirement here used to be inverted: it demanded by-uuid, on
@@ -595,7 +595,7 @@
               fi
 
               ./cssck ${
-                self.nixosConfigurations.workstation.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/style.css".source
+                self.nixosConfigurations.zagreus.config.home-manager.users.sebastianstupak.xdg.configFile."waybar/style.css".source
               }
               touch $out
             '';

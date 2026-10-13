@@ -25,6 +25,13 @@
     cargo
     nodejs
     python3
-    dotnet-sdk
+
+    # dotnet-sdk_10, NOT the unversioned alias. The alias is 8.x in this
+    # nixpkgs, and every maethril .NET repo pins 10.0.400 in global.json — so
+    # with the alias on PATH, `dotnet` cannot build them AND the pre-commit
+    # hook's `dotnet format` fails, which aborts the commit with no useful
+    # message. Measured: the alias reports 8.0.424 and global.json resolution
+    # refuses it.
+    dotnet-sdk_10
   ];
 }

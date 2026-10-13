@@ -13,7 +13,7 @@
     ../../modules/nixos/desktop.nix # Hyprland graphical session
     ../../modules/nixos/stylix.nix # system-wide theming (Kanagawa)
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
-    ../../modules/nixos/containers.nix # docker
+    ../../modules/nixos/containers.nix # rootless podman
     ../../modules/nixos/netbird.nix # mesh VPN
     ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)
     ../../modules/nixos/syncthing.nix # peer-to-peer sync (inert until my.syncthing.enable)
@@ -142,8 +142,18 @@
       "networkmanager"
       "video" # backlight control
       "audio"
-      "docker"
+
+      # podman, not docker. mutableUsers = false means an undeclared group
+      # here is an activation failure, so this had to move in the same commit
+      # that disabled docker. It grants the ROOTFUL socket; the rootless one
+      # this user's test suites actually use needs no group at all.
+      "podman"
     ];
+
+    # Containers outlive the login session. Without lingering the user's
+    # systemd session ends at logout and takes every running container with
+    # it, including a database left up on purpose.
+    linger = true;
   };
 
   # Calendar feed URLs, decrypted at activation for the user's vdirsyncer timer.

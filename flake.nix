@@ -90,7 +90,7 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # nixfmt-rfc-style via treefmt (see treefmt.nix).
+      # nixfmt (RFC 166) via treefmt (see treefmt.nix).
       treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
       # Build a NixOS system from a host module. Shared modules (home-manager,
@@ -117,7 +117,7 @@
         hestia = mkHost ./hosts/hestia; # Intel, SK hynix PC801
       };
 
-      # `nix fmt` — format the whole tree with nixfmt-rfc-style.
+      # `nix fmt` — format the whole tree with nixfmt (RFC 166).
       formatter.${system} = treefmtEval.config.build.wrapper;
 
       # `nix flake check` runs these.
@@ -606,7 +606,9 @@
       # activates the committed .githooks/ (idempotent, no-op outside a git repo).
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
-          nixfmt-rfc-style # formatter (matches treefmt.nix / `nix fmt`)
+          # `nixfmt`, not `nixfmt-rfc-style`: as of 26.05 they are the same
+          # derivation and the alias warns on every shell load.
+          nixfmt # formatter (matches treefmt.nix / `nix fmt`)
           deadnix # find dead/unused Nix code
           statix # lint Nix antipatterns
           lefthook # git hooks runner (invoked by .githooks/)

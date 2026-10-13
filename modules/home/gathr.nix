@@ -26,7 +26,7 @@
 let
   cfg = config.my.gathr;
 
-  gathrPkg = inputs.gathr.packages.${pkgs.system}.default;
+  gathrPkg = inputs.gathr.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
   # Every org gets a row, whether or not it has an account yet: an org that is
   # declared but unconnected must look different from one that is missing.

@@ -30,7 +30,7 @@
   ...
 }:
 let
-  herdrPkg = inputs.herdr.packages.${pkgs.system}.default;
+  herdrPkg = inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
   # Orgs with a directory to match against. Every org qualifies — unlike the
   # workspace rules, this needs no `workspaces`, because attaching to your own

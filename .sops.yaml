@@ -7,8 +7,10 @@
 #                sops.age.sshKeyPaths in modules/nixos/core.nix — so without
 #                this recipient the machine cannot read its own secrets at boot.
 #
-#   workstation_intel  the SECOND physical machine sharing hosts/workstation/
-#                (Intel, SK hynix PC801). Same derivation, different host key.
+#   desktop      the Intel machine (SK hynix PC801), which used to boot
+#                hosts/workstation/ and now has hosts/desktop/. Same
+#                derivation, different host key. Called `workstation_intel`
+#                until it got a host entry and a hostname of its own.
 #                This recipient is why it can read passwords.yaml at all: the
 #                first install of that machine had only the recipient above, so
 #                hashedPasswordFile never appeared, and update-users-groups.pl
@@ -39,13 +41,47 @@
 
 keys:
   - &workstation age14q4wp2reca4znhzeljj862kps7h6g4zz5z8ls84jp5m34ha7kd6qy2njex
-  - &workstation_intel age1attpxxmnvhnfrfqgmwt7vtyn4ax9d0274lqzfaymt57zs5894p5s0tck3f
+  - &desktop age1attpxxmnvhnfrfqgmwt7vtyn4ax9d0274lqzfaymt57zs5894p5s0tck3f
   - &sebastianstupak age16x0azpketkfava5fcfjzvhjrmv43pujsgnyj5x27zlqvsl0d7dmsdqd4mp
 
+# Ordered, and ORDER MATTERS: sops takes the FIRST matching rule, so the
+# per-host paths have to precede the catch-all or everything would be
+# encrypted to every machine again.
+#
+# A host's own directory is encrypted to that host and to you, and NOT to the
+# other machine. That is the point: a stolen laptop can read the hash it
+# already had to have, and not the other machine's. The cost is that your
+# standalone age key becomes the only way to re-key a reinstalled host from
+# elsewhere, which is why secrets/README.md insists it lives off-machine.
+#
+# secrets/common/ stays readable by every machine, because it has to be: the
+# restic credentials are used by all of them.
 creation_rules:
+  - path_regex: secrets/workstation/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+      - age:
+          - *workstation
+          - *sebastianstupak
+
+  - path_regex: secrets/desktop/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+      - age:
+          - *desktop
+          - *sebastianstupak
+
+  - path_regex: secrets/common/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+      - age:
+          - *workstation
+          - *desktop
+          - *sebastianstupak
+
+  # Catch-all for a file dropped straight into secrets/. Encrypted to
+  # everything, so a stray file is never LESS readable than intended — but put
+  # new files in common/ or a host directory rather than relying on this.
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
           - *workstation
-          - *workstation_intel
+          - *desktop
           - *sebastianstupak

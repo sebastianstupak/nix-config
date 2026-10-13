@@ -5,8 +5,19 @@ at activation time into `/run/secrets/<name>` (root-readable, or as configured).
 Cloning this repo yields nothing but encrypted blobs.
 
 The plumbing is wired (`sops-nix` input in `flake.nix`, `sops.age.sshKeyPaths`
-in `modules/nixos/core.nix`, `.sops.yaml` at the repo root) and three files are
-in use: `passwords.yaml`, `calendars.yaml`, `backup.yaml`.
+in `modules/nixos/core.nix`, `.sops.yaml` at the repo root). Files are laid out
+by who may read them:
+
+```
+secrets/common/      every machine + you   calendars.yaml, backup.yaml, passwords.yaml
+secrets/workstation/ that machine + you    (empty until you split the password)
+secrets/desktop/     that machine + you    (empty until you split the password)
+```
+
+`secrets/common/` has to stay readable by every machine — the restic
+credentials are used by all of them. A host directory deliberately excludes the
+other machines, so a stolen laptop can read the hash it already had to have and
+not the other's.
 
 > **The login password comes from here.** `sebastianstupak-hash` in
 > `passwords.yaml` feeds `users.users.sebastianstupak.hashedPasswordFile`, and
@@ -21,7 +32,7 @@ needed:
 | recipient | source | why |
 | --- | --- | --- |
 | `workstation` | host key `/etc/ssh/ssh_host_ed25519_key` on the AMD HP laptop | sops-nix decrypts as root at activation (`sops.age.sshKeyPaths`, `modules/nixos/core.nix`). Without it the machine cannot read its own secrets at boot. |
-| `workstation_intel` | host key of the **second** machine (Intel, SK hynix PC801) sharing `hosts/workstation/` | same mechanism, different host key. Two machines share one host entry, so each needs its own recipient. |
+| `desktop` | host key of the Intel machine (SK hynix PC801) | same mechanism, different host key. Was called `workstation_intel` while it booted `hosts/workstation/`; renamed when it got `hosts/desktop/`. The key material did not change — the anchor is just a name. |
 | `sebastianstupak` | standalone age key `~/.config/sops/age/keys.txt` | `sops` runs as you and cannot read the root-owned host key. Without it you could create a secret and never reopen it. |
 
 ### The lockout
@@ -66,6 +77,44 @@ nix run nixpkgs#ssh-to-age -- -i /etc/ssh/ssh_host_ed25519_key.pub  # host
 grep 'public key' ~/.config/sops/age/keys.txt                       # user
 ```
 
+## Splitting a host's password
+
+Both hosts currently point `sebastianstupak-hash` at
+`secrets/common/passwords.yaml`, so both machines share one password. The
+layout and the `.sops.yaml` rules for a per-host file are already in place; the
+split is two steps per machine, and **the order matters** because the halfway
+state is the lockout below.
+
+Do this ON the machine being split, so its host key is available to verify
+with:
+
+```bash
+# 1. Create the file. The creation rule encrypts it to THIS host and to you,
+#    and to nothing else.
+sops secrets/desktop/passwords.yaml          # or secrets/workstation/...
+
+#    Put a hash in it, generated however you like:
+#      mkpasswd -m yescrypt
+#    as:  sebastianstupak-hash: $y$j9T$...
+
+# 2. PROVE you can read it back before anything depends on it. If this fails,
+#    stop — repointing the host now would lock you out on the next activation.
+sops -d secrets/desktop/passwords.yaml
+sudo nix run nixpkgs#sops -- -d secrets/desktop/passwords.yaml   # as root, via the host key
+
+# 3. Only then repoint the host and rebuild.
+#      hosts/desktop/default.nix:  sopsFile = ../../secrets/desktop/passwords.yaml;
+git add -A
+nixos-rebuild build --flake .#desktop
+sudo nixos-rebuild switch --flake .#desktop
+```
+
+Keep a rollback target handy: `sudo nixos-rebuild switch --rollback` restores
+the previous generation, and the boot menu holds 20 of them.
+
+Once both hosts have their own file, `secrets/common/passwords.yaml` has no
+reader and should be removed.
+
 ## 2. Create an encrypted file
 
 ```bash
@@ -96,4 +145,8 @@ Reference the decrypted path at runtime via
 
 - **Never** commit plaintext. Only edit secret files through `sops`.
 - `git add` the encrypted file before you rebuild (see the repo `AGENTS.md`).
-- If you rotate/add recipients, run `sops updatekeys secrets/secrets.yaml`.
+- If you rotate/add recipients, run `sops updatekeys secrets/<path>.yaml`.
+- Moving a file between `common/` and a host directory does **not** re-encrypt
+  it. The creation rules only apply to new files and to `sops updatekeys`, so
+  run that afterwards or the file keeps its old recipients — more permissive
+  than the directory implies.

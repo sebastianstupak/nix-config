@@ -113,8 +113,8 @@
     {
       nixosConfigurations = {
         # nixos-rebuild switch --flake .#workstation
-        workstation = mkHost ./hosts/workstation;
-        # add more machines here, e.g.:  desktop = mkHost ./hosts/desktop;
+        workstation = mkHost ./hosts/workstation; # AMD HP laptop
+        desktop = mkHost ./hosts/desktop; # Intel, SK hynix PC801
       };
 
       # `nix fmt` — format the whole tree with nixfmt-rfc-style.
@@ -534,9 +534,9 @@
         # shell. Labels are the only stable name both machines can share, and
         # they are set at mkfs time (docs/INSTALL.md step 3 verifies them).
         hardware-config-is-real = pkgs.runCommand "hardware-config-is-real" { } ''
-          hw=${./hosts/workstation/hardware-configuration.nix}
+          hw=${./hosts/common/hardware-configuration.nix}
           if grep -q PLACEHOLDER "$hw"; then
-            echo "hosts/workstation/hardware-configuration.nix is still the placeholder." >&2
+            echo "hosts/common/hardware-configuration.nix is still the placeholder." >&2
             echo "See docs/INSTALL.md step 5 — merge, do not replace." >&2
             exit 1
           fi

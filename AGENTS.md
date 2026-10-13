@@ -1,20 +1,33 @@
 # AGENTS.md
 
 Guidance for AI agents (and humans) working in this repository. This is a
-**flake-based NixOS configuration** for **two physical machines sharing one host
-entry** (host `workstation`, user `sebastianstupak`): an AMD HP laptop (daily
-driver) and an Intel SK hynix machine. They share the hostname and every module,
-so a change to `hosts/workstation/` affects both and nothing can be enabled on
-only one of them. See README "Two machines" and rule 7 below. Keep changes
-small, formatted, and committed. Follow the rules below exactly.
+**flake-based NixOS configuration** for **two physical machines, one host entry
+each**, user `sebastianstupak`:
+
+| host | machine | notes |
+| --- | --- | --- |
+| `workstation` | AMD HP laptop, daily driver | prunes the restic repository |
+| `desktop` | Intel, SK hynix PC801 | backs up, expires nothing |
+
+Both import `hosts/common/`, which holds every module and all shared settings —
+so a change there affects both machines. A host entry holds only what
+distinguishes it: its hostname, its password secret, and whether it prunes.
+
+They shared ONE entry until the second machine needed its own hostname and
+password: a single `nixosConfiguration` can only produce one
+`networking.hostName` and one `hashedPasswordFile`, and Nix cannot branch on
+which machine is evaluating. See README "Two machines" and rule 7 below. Keep
+changes small, formatted, and committed. Follow the rules below exactly.
 
 ## Commands
 
 All commands run from the repo root. `<host>` is `workstation`.
 
 ```bash
-# Apply config: build + activate + set as boot default (needs root)
-sudo nixos-rebuild switch --flake .#workstation
+# Apply config: build + activate + set as boot default (needs root).
+# USE THIS MACHINE'S HOST — they are no longer the same entry.
+sudo nixos-rebuild switch --flake .#workstation   # the AMD HP laptop
+sudo nixos-rebuild switch --flake .#desktop       # the Intel machine
 
 # Stage for next boot only — safer for risky changes (kernel, bootloader, FS)
 sudo nixos-rebuild boot --flake .#workstation
@@ -88,9 +101,11 @@ statix.toml                   statix lint config (ignores generated hardware con
 .githooks/                    committed git hooks (commit-msg, pre-commit, pre-push)
 scripts/                      helper scripts (commit-msg.sh: Conventional Commits check)
 .sops.yaml                    sops recipients + creation rules
-hosts/<host>/
-  default.nix                 Per-machine config; imports the profiles it needs + home-manager
+hosts/common/
+  default.nix                 Everything both machines share: modules, user, home-manager, backup repo
   hardware-configuration.nix  Hand-merged union of BOTH machines (see rule 7) — never regenerate over it
+hosts/<host>/
+  default.nix                 Only what distinguishes the machine: hostname, password secret, prune
 modules/nixos/                System modules — core (baseline, always imported via default.nix)
                               + opt-in profiles: desktop (Hyprland), stylix (theming),
                               laptop (power/bt/fw), containers (docker),
@@ -101,7 +116,8 @@ modules/home/                 home-manager modules: shell, cli, terminal, editor
                               and the `org` launcher built from it) + herdr
                               (one persistent multiplexer session per org)
 home/<user>/                  Per-user home-manager config (identity)
-secrets/                      Encrypted secrets only (sops-nix)
+secrets/common/               Encrypted, readable by every machine (restic creds must be)
+secrets/<host>/               Encrypted to that machine + you only — see secrets/README.md
 docs/                         Workflows a human follows, not module rationale
                               (INSTALL.md, ABLETON.md, ORGS.md, GAMING.md,
                               MUSIC.md, BACKUP.md, GATHR.md). A module comment explains
@@ -118,8 +134,11 @@ Add these directories only when you actually need them (YAGNI): `overlays/`
 (nixpkgs overlays), `pkgs/` (custom `callPackage` packages), `lib/` (helper
 functions). Document new top-level dirs here.
 
-**Adding a host:** create `hosts/<name>/` importing the profiles it needs, then
-add `<name> = mkHost ./hosts/<name>;` under `nixosConfigurations` in `flake.nix`.
+**Adding a host:** create `hosts/<name>/default.nix` importing `../common`, set
+its `networking.hostName`, declare its `sebastianstupak-hash` secret, then add
+`<name> = mkHost ./hosts/<name>;` under `nixosConfigurations` in `flake.nix`.
+Enrol its host key in `.sops.yaml` **before its first boot** — see
+"The lockout" in `secrets/README.md`.
 **Adding a user:** create `home/<name>/` and reference it from the host's
 `home-manager.users.<name>`.
 
@@ -198,6 +217,7 @@ Agents cannot boot this machine. To verify without applying:
 ```bash
 nix flake check                              # eval + formatting
 nixos-rebuild build --flake .#workstation    # full build, no activation
+nixos-rebuild build --flake .#desktop        # the other machine — check BOTH
 ```
 
 Report the actual output. If a build fails, include the error (add `--show-trace`)

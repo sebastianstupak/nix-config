@@ -37,7 +37,7 @@
   # `systemctl --user status vdirsyncer`, in ~/.local/share/calendars/, and in
   # the hover when a group has more than one feed.
   #
-  # Adding a feed: a key in secrets/calendars.yaml, a matching `sops.secrets`
+  # Adding a feed: a key in secrets/common/calendars.yaml, a matching `sops.secrets`
   # entry in hosts/workstation/default.nix, and a line here. Distinct icons are
   # the point of splitting the counts — two 󰃭 chips would be a puzzle — and both
   # of these are covered by JetBrainsMono NF (`fc-list ':charset=f00d6'`).

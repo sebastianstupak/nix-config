@@ -36,8 +36,8 @@ in
         Restic repository to push to, or null to disable backups entirely.
 
         Setup, once:
-        1. Put a long random passphrase in `secrets/backup.yaml` under
-           `restic-password` (`sops secrets/backup.yaml`). Store a copy
+        1. Put a long random passphrase in `secrets/common/backup.yaml` under
+           `restic-password` (`sops secrets/common/backup.yaml`). Store a copy
            somewhere that is NOT this laptop — losing it means losing every
            snapshot, since restic encrypts client-side and Anthropic-style
            "reset my password" does not exist for a repository.
@@ -81,7 +81,7 @@ in
     # declared secret is missing from the file, so an unconditional declaration
     # would break every rebuild until the passphrase exists.
     sops.secrets.restic-password = {
-      sopsFile = ../../secrets/backup.yaml;
+      sopsFile = ../../secrets/common/backup.yaml;
       key = "restic-password";
     };
 
@@ -95,7 +95,7 @@ in
     # a URL would land in the store and in `ps`. Harmless and unused for a local
     # or sftp repository; leave the value empty in that case.
     sops.secrets.restic-env = {
-      sopsFile = ../../secrets/backup.yaml;
+      sopsFile = ../../secrets/common/backup.yaml;
       key = "restic-env";
     };
 

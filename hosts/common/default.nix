@@ -188,6 +188,24 @@
     useUserPackages = true;
     extraSpecialArgs = { inherit inputs; };
     users.sebastianstupak = import ../../home/sebastianstupak;
+
+    # Rename, don't abort. When home-manager starts managing a path that already
+    # holds a real file — because an app wrote it imperatively before the config
+    # declared it — activation refuses to clobber it and the whole switch fails.
+    # That is the right default for a tool that never destroys data, but the
+    # failure is mid-activation, so you get a half-applied generation and a
+    # manual `mv` before you can retry.
+    #
+    # Hit first by xdg.mimeApps taking over ~/.config/mimeapps.list, which
+    # Proton Mail and Claude Code had each registered a URL scheme in (see
+    # modules/home/browsers.nix). It will happen again for any dotfile an app
+    # owns before we do, so set it once here rather than per-file.
+    #
+    # Caveat: the backup is single-slot. If <path>.hm-bak already exists,
+    # activation fails again with "backup file already exists" — clear the stale
+    # .hm-bak rather than changing this extension, or the next collision just
+    # moves the problem to a new suffix.
+    backupFileExtension = "hm-bak";
   };
 
   # The NixOS release this system was first installed with.

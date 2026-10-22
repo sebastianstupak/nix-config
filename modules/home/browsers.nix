@@ -104,4 +104,41 @@ in
       { id = "ghmbeldphafepmbegfdlkpapadhbakde"; } # Proton Pass
     ];
   };
+
+  # Which browser a clicked link opens in. Without this, nothing declares it and
+  # xdg-open falls back to the first entry in the profile's mimeinfo.cache —
+  # which lists handlers ALPHABETICALLY:
+  #
+  #   x-scheme-handler/https=chromium-browser.desktop;librewolf.desktop;
+  #
+  # so `chromium-browser` < `librewolf` silently made the cross-browser-testing
+  # browser the daily one. Links from ghostty (and anything else going through
+  # xdg-open or the desktop portal) landed in a Chromium that is signed in to
+  # nothing, so logged-in pages rendered as an error — and because a Chromium
+  # was usually already running, the second instance also fought over the
+  # profile locks ("database is locked", "Unable to open the password store
+  # database"). Naming the default is the whole fix.
+  #
+  # Taking this over makes ~/.config/mimeapps.list a read-only store symlink, so
+  # imperative registration (`xdg-mime default`, a browser's own "make me
+  # default" prompt) stops working. That is the trade for reproducibility, and
+  # it means the two handlers that WERE registered that way have to be declared
+  # here too, or they are lost on the next switch:
+  #   * proton-inbox  — Proton Mail's desktop app registers this for its own
+  #                     mail: style links.
+  #   * claude-cli    — Claude Code writes claude-code-url-handler.desktop into
+  #                     ~/.local/share/applications itself; only the association
+  #                     is declarative, the .desktop file stays imperative.
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "text/html" = "librewolf.desktop";
+      "application/xhtml+xml" = "librewolf.desktop";
+      "x-scheme-handler/http" = "librewolf.desktop";
+      "x-scheme-handler/https" = "librewolf.desktop";
+
+      "x-scheme-handler/proton-inbox" = "proton-mail.desktop";
+      "x-scheme-handler/claude-cli" = "claude-code-url-handler.desktop";
+    };
+  };
 }

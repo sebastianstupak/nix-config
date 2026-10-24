@@ -27,6 +27,7 @@
     ./hyprland.nix
     ./waybar.nix
     ./notifications.nix
+    ./battery.nix
     ./calendar.nix
     ./mono-icons.nix
   ];

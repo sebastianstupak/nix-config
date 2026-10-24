@@ -108,10 +108,12 @@ hosts/<host>/
   default.nix                 Only what distinguishes the machine: hostname, password secret, prune
 modules/nixos/                System modules — core (baseline, always imported via default.nix)
                               + opt-in profiles: desktop (Hyprland), stylix (theming),
-                              laptop (power/bt/fw), containers (docker),
+                              laptop (bt/fw/backlight), power (battery thresholds, lid,
+                              opt-in hibernation — docs/POWER.md), containers (docker),
                               audio (Ableton), gaming (Steam/Proton)
 modules/home/                 home-manager modules: shell, cli, terminal, editor,
                               browsers, office, proton, media, comms, git, dev, hyprland,
+                              battery (low-battery toasts, thresholds from my.power),
                               orgs (the `my.orgs` declaration) + org (workspaces
                               and the `org` launcher built from it) + herdr
                               (one persistent multiplexer session per org)
@@ -120,7 +122,7 @@ secrets/common/               Encrypted, readable by every machine (restic creds
 secrets/<host>/               Encrypted to that machine + you only — see secrets/README.md
 docs/                         Workflows a human follows, not module rationale
                               (INSTALL.md, ABLETON.md, ORGS.md, GAMING.md,
-                              MUSIC.md, BACKUP.md, GATHR.md). A module comment explains
+                              MUSIC.md, BACKUP.md, POWER.md, GATHR.md). A module comment explains
                               why a line of Nix exists; a doc explains what to do
                               on a new machine. Link the doc from the module.
 ```

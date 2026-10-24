@@ -1,7 +1,7 @@
 # Hyprland Wayland desktop: compositor config, bar, launcher, notifications,
 # lock/idle, and supporting utilities. System-level Hyprland (the session) is
 # enabled in modules/nixos/desktop.nix; here we own the per-user config.
-{ pkgs, ... }:
+{ osConfig, pkgs, ... }:
 {
   wayland.windowManager.hyprland = {
     enable = true;
@@ -244,8 +244,19 @@
           on-timeout = "hyprlock";
         }
         {
-          timeout = 600; # suspend after 10 min idle
-          on-timeout = "systemctl suspend";
+          timeout = 600; # sleep after 10 min idle
+          # suspend-then-hibernate once there is a swapfile to hibernate into
+          # (my.power.hibernate.enable, modules/nixos/power.nix). Plain suspend
+          # keeps drawing power, so a machine left idle on battery eventually
+          # dies and loses the session — which is the whole thing hibernation
+          # is here to fix, and it is pointless to fix the lid but not the
+          # idle timeout. before_sleep_cmd above locks the session either way,
+          # so resuming lands on hyprlock rather than in the session.
+          on-timeout =
+            if osConfig.my.power.hibernate.enable then
+              "systemctl suspend-then-hibernate"
+            else
+              "systemctl suspend";
         }
       ];
     };

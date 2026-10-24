@@ -10,8 +10,8 @@
   services.tlp.enable = true;
   powerManagement.enable = true;
 
-  # Suspend when the lid closes.
-  services.logind.settings.Login.HandleLidSwitch = "suspend";
+  # What the lid does, when to warn about the battery and what happens when it
+  # runs out are all policy rather than hardware enablement — modules/nixos/power.nix.
 
   # Bluetooth + a tray applet (Hyprland ships no built-in one).
   hardware.bluetooth = {

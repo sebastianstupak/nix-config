@@ -147,6 +147,7 @@ these explain what to do.
 | [docs/BACKUP.md](./docs/BACKUP.md) | restic to object storage: what is backed up, restoring, and the several-machines design |
 | [docs/MUSIC.md](./docs/MUSIC.md) | MuseScore and Muse Hub: sound libraries, the audio path, and two things that are not bugs |
 | [docs/SYNC.md](./docs/SYNC.md) | Syncthing: pairing a device, the `st` command, and why this is not a backup |
+| [docs/POWER.md](./docs/POWER.md) | Battery thresholds, what happens at 7%, and encrypting the root before enabling hibernation |
 
 ## Day-to-day
 

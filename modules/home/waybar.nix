@@ -13,6 +13,7 @@
 {
   config,
   lib,
+  osConfig,
   pkgs,
   ...
 }:
@@ -944,9 +945,14 @@ in
       # `bat` is deliberately unset: hardware-configuration.nix is still a
       # placeholder, so the BAT0/BAT1 name isn't known here. Waybar autodetects.
       battery = {
+        # From my.power (modules/nixos/power.nix), not hardcoded: these were
+        # 30/15 while nothing else watched the battery at all, so the bar went
+        # red at a level no notification and no action agreed with. One set of
+        # numbers now drives the colour here, the toast in
+        # modules/home/battery.nix and upower's action.
         states = {
-          warning = 30;
-          critical = 15;
+          warning = osConfig.my.power.warnPercentage;
+          critical = osConfig.my.power.criticalPercentage;
         };
         format = "{icon} {capacity}%";
         format-charging = "󰂄 {capacity}%";

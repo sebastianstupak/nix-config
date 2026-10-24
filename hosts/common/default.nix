@@ -19,6 +19,7 @@
     ../../modules/nixos/desktop.nix # Hyprland graphical session
     ../../modules/nixos/stylix.nix # system-wide theming (Kanagawa)
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
+    ../../modules/nixos/power.nix # battery thresholds, lid, hibernation (docs/POWER.md)
     ../../modules/nixos/containers.nix # rootless podman
     ../../modules/nixos/netbird.nix # mesh VPN
     ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)

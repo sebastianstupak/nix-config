@@ -146,12 +146,50 @@ turning this on gives it up. Leave it off on a machine you only carry.
   interface including `wt0`, sshd listening or not. The per-interface rules are
   mandatory, not belt-and-braces. This is the single most common way this setup
   appears broken.
+- **`hardware.graphics.enable` does not give you VA-API on Intel**, and this is
+  the one thing that actually was broken. Mesa ships Gallium's VA-API drivers,
+  so the AMD machine had working hardware video all along; Intel's lives in a
+  separate package nothing was pulling in, so `iHD_drv_video.so` was simply
+  absent and libva failed with "unknown libva error". Sunshine then failed
+  *every* encoder — nvenc, vulkan, vaapi — which leaves nothing but a software
+  encoder, i.e. the one thing it exists to avoid. Fixed by
+  `hardware.graphics.extraPackages = [ pkgs.intel-media-driver ]` in
+  `modules/nixos/desktop.nix`. Check with `vainfo`: you want
+  `VAEntrypointEncSlice` lines, not just `VAEntrypointVLD`.
 - **`capSysAdmin` is deliberately off.** It is for DRM/KMS capture, and we use
   `capture = "wlr"` — the native wlroots path, and the only backend that can see
   a virtual output. The capability applies to the whole binary and breaks
   launching applications as the ordinary user, so there is no reason to pay for
   it. **If capture fails outright**, the fallback is `capture = "kms"` plus
   `capSysAdmin = true`.
+
+### Log noise that is expected, not broken
+
+Sunshine probes every encoder at startup and says so itself — "Ignore any errors
+mentioned above, they are not relevant." Specifically:
+
+- **`Failed to create a CUDA device` / `Cannot load libcuda.so.1`** — the nvenc
+  probe. Neither machine has an Nvidia GPU. The probe is left in place rather
+  than pinning `encoder = "vaapi"`, because auto-detection is self-healing if
+  the hardware ever changes and the cost is about two seconds of benign log at
+  session start.
+- **`No usable encoding entrypoint found for profile VAProfileAV1Profile0`** —
+  Raptor Lake decodes AV1 but does not encode it. Sunshine falls back to
+  `hevc_vaapi`, which is what you want anyway.
+- **`EGL: context priority set to HIGH but CAP_SYS_NICE capability is
+  missing`** — Sunshine asks for a high-priority GL context and does not get
+  one. Capture works regardless; it may matter for smoothness under heavy load.
+  Not granted because the capability cannot be given to a *user* systemd unit
+  via `AmbientCapabilities`, and the alternative is overriding the module's
+  `ExecStart` to point at a hand-rolled wrapper. Revisit if the stream stutters
+  while the CPU is busy.
+- **Startup takes around a minute.** Each VA-API codec probe costs ~14s. It is
+  a one-time cost in a background user service at session start, so nothing
+  waits on it — but it does mean Sunshine is not connectable the instant you
+  log in.
+- **`avahi::entry_group_new() failed: Not permitted`** means
+  `services.avahi.publish` is off. `remote.nix` turns it on; if you see this,
+  the generation you are running predates that.
 - **Black frames are an Nvidia problem**, not a Hyprland one: the `wlr` backend
   cannot read Nvidia's tiled framebuffer layout. Neither machine here has one.
 - **Sunshine's user unit needs `graphical-session.target` to actually be

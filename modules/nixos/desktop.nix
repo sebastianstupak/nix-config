@@ -22,6 +22,32 @@
   # Wayland acceleration.
   hardware.graphics.enable = true;
 
+  # VA-API, which `hardware.graphics.enable` does NOT give you on Intel.
+  #
+  # Mesa ships Gallium's VA-API drivers, so the AMD machine already had working
+  # hardware video (radeonsi_drv_video.so). Intel's lives in a separate package
+  # that nothing was pulling in, so /run/opengl-driver/lib/dri/ held no
+  # iHD_drv_video.so at all and libva fell over with "unknown libva error" on
+  # this machine only. The symptom that found it: Sunshine
+  # (modules/nixos/remote.nix) probing encoders and failing EVERY one — nvenc
+  # (no Nvidia, expected), vulkan, then vaapi — which leaves desktop streaming
+  # with nothing but a software encoder, i.e. the one thing it exists to avoid.
+  #
+  # Not remote-specific, which is why it lives here rather than in remote.nix:
+  # the same driver is what lets a browser or mpv decode h264/HEVC on the GPU
+  # instead of the CPU, and on a laptop that is battery life.
+  #
+  # Installed on BOTH machines on purpose, the same union trade
+  # hosts/common/hardware-configuration.nix makes for microcode: these hosts
+  # share this file and Nix cannot branch on which one is evaluating, so the
+  # alternative is the Intel machine silently keeping the broken behaviour.
+  # The AMD machine carries some unused store paths; libva picks its driver
+  # from the kernel driver in use, so the idle one is never loaded.
+  #
+  # iHD (intel-media-driver) rather than the older i965: this is a Raptor Lake
+  # part, and i965 only covers up to Gen9. Verify with `vainfo` after a switch.
+  hardware.graphics.extraPackages = [ pkgs.intel-media-driver ];
+
   # Login manager: greetd + tuigreet, offering the installed Wayland sessions.
   #
   # `--sessions` rather than `--cmd Hyprland`: with UWSM the session has to be

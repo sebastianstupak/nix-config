@@ -45,8 +45,17 @@
   # from the kernel driver in use, so the idle one is never loaded.
   #
   # iHD (intel-media-driver) rather than the older i965: this is a Raptor Lake
-  # part, and i965 only covers up to Gen9. Verify with `vainfo` after a switch.
+  # part, and i965 only covers up to Gen9.
   hardware.graphics.extraPackages = [ pkgs.intel-media-driver ];
+
+  # vainfo, the one command that answers "is hardware video actually working".
+  # Installed because the failure above was INVISIBLE without it: everything
+  # still rendered, video still played, and the only symptom was a CPU working
+  # harder than it needed to — plus Sunshine quietly falling back to a software
+  # encoder. A diagnostic for a silent failure is worth having on the machine
+  # rather than in a `nix shell` someone has to think to reach for.
+  # Want VAEntrypointEncSlice in the output, not just VAEntrypointVLD.
+  environment.systemPackages = [ pkgs.libva-utils ];
 
   # Login manager: greetd + tuigreet, offering the installed Wayland sessions.
   #

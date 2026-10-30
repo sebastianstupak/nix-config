@@ -221,6 +221,26 @@ in
           HandleLidSwitchExternalPower = "suspend";
         };
 
+    # AND LOGIND HAS TO BE TOLD TO RE-READ IT, or everything above is a file on
+    # disk that nothing acts on.
+    #
+    # nixpkgs ships systemd-logind with restartIfChanged = false — restarting it
+    # would tear down the graphical session — but it also leaves
+    # reloadIfChanged at the global default of false, so a switch writes the new
+    # logind.conf and the RUNNING daemon keeps the old values until the next
+    # reboot. That was not theoretical: after the switch that introduced
+    # my.power.remoteAccess, /etc/systemd/logind.conf said
+    # `HandleLidSwitch=ignore` while logind still answered "suspend" on D-Bus,
+    # six days into its uptime. The lid would have kept suspending a machine
+    # whose whole configuration said it should not.
+    #
+    # Reload rather than restart, which is the part that makes this safe:
+    # logind advertises CanReload=yes and re-reads its configuration in place,
+    # without dropping sessions. Verify after a switch with
+    #   busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+    #     org.freedesktop.login1.Manager HandleLidSwitch
+    systemd.services.systemd-logind.reloadIfChanged = true;
+
     # The hibernation target. One file inside the root filesystem, so it is
     # covered by whatever encrypts root — which is the entire reason this is
     # a swapFILE and not a swap partition.

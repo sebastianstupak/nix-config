@@ -135,6 +135,21 @@ gone until somebody physically touches the laptop.
 The five-minute *lock* is deliberately untouched — walking away still secures
 the screen. The machine just stays awake behind it.
 
+**Verify it actually took effect**, because the file saying so is not enough:
+
+```bash
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager HandleLidSwitch      # want: s "ignore"
+```
+
+nixpkgs ships systemd-logind with `restartIfChanged = false` (restarting it
+would tear down the session) and leaves `reloadIfChanged` at the global default
+of false — so a switch used to write the new `logind.conf` while the running
+daemon kept the old values until the next reboot. `modules/nixos/power.nix` now
+sets `reloadIfChanged = true`; logind advertises `CanReload=yes` and re-reads
+its config in place without dropping sessions. If `busctl` disagrees with
+`/etc/systemd/logind.conf`, run `sudo systemctl reload systemd-logind`.
+
 **The cost:** a laptop that will flatten its battery if left closed in a bag.
 That is exactly the failure hibernation exists to fix (`docs/POWER.md`), and
 turning this on gives it up. Leave it off on a machine you only carry.

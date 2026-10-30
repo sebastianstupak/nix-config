@@ -52,6 +52,37 @@ in
       '';
     };
 
+    remoteAccess = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Keep this machine reachable while nobody is at it.
+
+        A suspended machine is not reachable and cannot be woken: suspending
+        drops the WireGuard tunnel, and Wake-on-LAN does not traverse an
+        overlay network, so there is nothing left listening to wake it with.
+        Whatever was running is unreachable until somebody physically touches
+        the laptop — which defeats the entire point of
+        {option}`my.remote.enable`.
+
+        So this stops the two things that suspend it unattended: the lid (below)
+        and hypridle's idle timer (modules/home/hyprland.nix, which reads this
+        through `osConfig`). The 5-minute LOCK is deliberately left alone — the
+        machine still locks itself, it just stays awake behind the lock screen,
+        and `loginctl unlock-session` over SSH gets you back in.
+
+        The lid matters twice over, and the second reason is easy to miss:
+        closing it also switches the physical output off, and Hyprland will not
+        create clients with no monitor at all. So a closed lid breaks desktop
+        streaming even on a machine that never suspends — see
+        {option}`my.remote.headlessOutput` for the other half of that fix.
+
+        The cost is a laptop that will flatten its battery if left closed in a
+        bag, which is the exact failure hibernation exists to fix. Leave this
+        off on a machine you carry and do not connect to.
+      '';
+    };
+
     hibernate = {
       enable = lib.mkEnableOption ''
         suspend-to-disk, so that losing power keeps the session.
@@ -168,14 +199,27 @@ in
     # /sys/class/power_supply/BAT0/alarm, so the trip point works). Setting a
     # delay DISABLES that path and replaces it with periodic timed wakeups,
     # which both drains more and hibernates on a clock rather than on need.
-    services.logind.settings.Login = {
-      HandleLidSwitch = if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend";
+    #
+    # my.power.remoteAccess overrides BOTH of these to "ignore" rather than
+    # just the on-battery one. Closing the lid of a machine you intend to
+    # connect to is a normal thing to do — it is how a laptop sits on a desk
+    # when it is being used as a server — and a lid that suspends on battery
+    # would make reachability depend on whether the charger happened to be in.
+    services.logind.settings.Login =
+      if cfg.remoteAccess then
+        {
+          HandleLidSwitch = "ignore";
+          HandleLidSwitchExternalPower = "ignore";
+        }
+      else
+        {
+          HandleLidSwitch = if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend";
 
-      # On AC, closing the lid should not start a countdown to hibernation —
-      # the battery is not the constraint. (systemd's own default, set
-      # explicitly so it does not quietly follow HandleLidSwitch above.)
-      HandleLidSwitchExternalPower = "suspend";
-    };
+          # On AC, closing the lid should not start a countdown to hibernation —
+          # the battery is not the constraint. (systemd's own default, set
+          # explicitly so it does not quietly follow HandleLidSwitch above.)
+          HandleLidSwitchExternalPower = "suspend";
+        };
 
     # The hibernation target. One file inside the root filesystem, so it is
     # covered by whatever encrypts root — which is the entire reason this is

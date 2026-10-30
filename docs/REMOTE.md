@@ -1,0 +1,186 @@
+# Remote access
+
+Reaching one of these machines from another — or from a Windows or macOS box.
+Two separate things, and it is worth keeping them separate in your head:
+
+- **A terminal.** SSH, plus `herdr` sessions that were already running. This is
+  what you want for Claude Code, and it is the one that works over a phone
+  tether.
+- **A desktop.** Sunshine on the host, Moonlight on the client. Needed much
+  less often than it feels like it will be.
+
+The mechanism and the reasoning live in `modules/nixos/remote.nix`. This file is
+the walkthrough.
+
+## How it is reachable
+
+Netbird (`modules/nixos/netbird.nix`). Every machine gets a stable
+`100.64.0.0/10` address and an overlay FQDN no matter which NAT it is behind, so
+there is no port forwarding, no dynamic DNS, and no third-party rendezvous
+service.
+
+**Every port is opened on `wt0` only.** `modules/nixos/core.nix` deliberately
+leaves sshd unreachable, because these are laptops that join café and hotel
+networks. Nothing here changes that: the physical NICs still see a closed port.
+
+Find a machine's address with:
+
+```bash
+netbird status          # "NetBird IP" and "FQDN"
+```
+
+## Terminal
+
+```bash
+ssh sebastianstupak@workstation-98-165.netbird.cloud
+herdr                   # attach to whatever was left running
+```
+
+Keys only — passwords are refused system-wide. To connect from a new machine,
+put its public key in `my.remote.authorizedKeys` (`hosts/common/default.nix`)
+and rebuild; adding it to `~/.ssh/authorized_keys` by hand works until the next
+reinstall and then silently does not.
+
+To add a new machine as a *destination*, collect its host key so there is no
+trust-on-first-use prompt:
+
+```bash
+# on the new machine
+cat /etc/ssh/ssh_host_ed25519_key.pub
+# then add it under my.remote.peers in hosts/common/default.nix
+```
+
+`zagreus` is not in `peers` yet — its host key has not been collected. Until it
+is, connecting to it prompts once.
+
+### Unlocking a locked screen
+
+The machine locks itself after five minutes idle whether or not anybody is
+coming back, so this is the normal case, not an edge case:
+
+```bash
+ssh sebastianstupak@<host> loginctl unlock-session
+```
+
+This works because `modules/home/hyprland.nix` sets hypridle's `unlock_cmd`.
+Without it, `loginctl unlock-session` is accepted and does nothing — hypridle is
+the thing subscribed to logind's unlock signal, and with no command configured
+the event lands nowhere.
+
+Unlocking this way also opens the GNOME keyring, via
+`security.pam.services.hyprlock.enableGnomeKeyring`.
+
+## Desktop
+
+### Pairing (once per client)
+
+The web UI is restricted to `origin_web_ui_allowed = "pc"`, so it is not exposed
+on the overlay at all. Reach it through the SSH connection you already have:
+
+```bash
+ssh -L 47990:localhost:47990 sebastianstupak@<host>
+```
+
+Then open <https://localhost:47990> on the client, accept the self-signed
+certificate, and set a username and password on first visit. In Moonlight, add
+the host by its **overlay IP** (`100.94.98.165`, not the LAN address), and enter
+the PIN Moonlight shows into the web UI's PIN page.
+
+Pairing state lives in `~/.config/sunshine/`, not in the Nix-generated config,
+so it survives rebuilds.
+
+### Connecting
+
+Moonlight, on the overlay IP. You get the real session: the actual workspaces,
+the actual window layout, the same screen someone standing at the machine would
+see. `my.remote.output` defaults to `eDP-1`, the laptop panel.
+
+That is a deliberate departure from most Sunshine-on-Hyprland guides, which
+create a virtual output and pin workspaces 1–10 to the physical display so the
+remote gets a dedicated empty one. Here workspaces 1–9 *are* the orgs
+(`modules/home/orgs.nix`), so an empty remote workspace is the opposite of
+useful.
+
+### When the panel is not capturable
+
+Set `my.remote.headlessOutput = true` and rebuild. This creates a virtual output
+named `remote` and streams that instead.
+
+Two cases call for it:
+
+- **The lid is closed.** That switches the physical output off, and Hyprland
+  will not create clients with no monitor at all. Note this is a *second*,
+  independent reason the lid must not suspend — see below.
+- **You want a resolution other than the panel's.**
+
+It is still the same session and the same compositor — an extra monitor, not a
+second login. The output is created by a user unit ordered `before
+sunshine.service`, and that ordering is load-bearing: Sunshine's `wlr` backend
+reads `output_name` once at startup and caches it, so an output that shows up
+later is ignored and it streams the first display it finds instead. The fixed
+name matters for the same reason — Hyprland otherwise increments
+`HEADLESS-2`, `HEADLESS-3`, … on every create.
+
+## Staying reachable
+
+`my.power.remoteAccess = true` (`modules/nixos/power.nix`) is what keeps the
+machine answering while nobody is at it. It stops the two things that suspend it
+unattended: the lid, and hypridle's ten-minute idle timer.
+
+This is not optional for remote access. **A suspended machine cannot be woken.**
+Suspending drops the WireGuard tunnel, and Wake-on-LAN does not traverse an
+overlay network, so there is nothing left listening. Whatever was running is
+gone until somebody physically touches the laptop.
+
+The five-minute *lock* is deliberately untouched — walking away still secures
+the screen. The machine just stays awake behind it.
+
+**The cost:** a laptop that will flatten its battery if left closed in a bag.
+That is exactly the failure hibernation exists to fix (`docs/POWER.md`), and
+turning this on gives it up. Leave it off on a machine you only carry.
+
+## Things that went wrong, or nearly did
+
+- **The overlay is not implicitly trusted by the firewall.** With
+  `networking.firewall.allowedTCPPorts` empty, port 22 is blocked on *every*
+  interface including `wt0`, sshd listening or not. The per-interface rules are
+  mandatory, not belt-and-braces. This is the single most common way this setup
+  appears broken.
+- **`capSysAdmin` is deliberately off.** It is for DRM/KMS capture, and we use
+  `capture = "wlr"` — the native wlroots path, and the only backend that can see
+  a virtual output. The capability applies to the whole binary and breaks
+  launching applications as the ordinary user, so there is no reason to pay for
+  it. **If capture fails outright**, the fallback is `capture = "kms"` plus
+  `capSysAdmin = true`.
+- **Black frames are an Nvidia problem**, not a Hyprland one: the `wlr` backend
+  cannot read Nvidia's tiled framebuffer layout. Neither machine here has one.
+- **Sunshine's user unit needs `graphical-session.target` to actually be
+  reached.** The usual complaint on Wayland window managers is that it never
+  starts because nothing starts that target. `programs.hyprland.withUWSM`
+  (`modules/nixos/desktop.nix`) is why that does not apply here — if Sunshine
+  ever silently fails to start, check that first.
+- **mDNS keeps publishing.** The Sunshine module turns on `services.avahi.publish`,
+  so this host advertises a Sunshine record on every network it joins, café ones
+  included. Kept, because it is what makes Moonlight discovery painless, and the
+  ports are shut everywhere but the overlay — a stranger learns a machine runs
+  Sunshine and gets refused. Set `services.avahi.publish.enable = false` to trade
+  discovery for silence; adding the host by overlay IP still works.
+- **`nixpkgs`' Sunshine module is a moving target** —
+  [#433058](https://github.com/NixOS/nixpkgs/issues/433058) tracks module and
+  settings limitations, and [#475181](https://github.com/NixOS/nixpkgs/issues/475181)
+  was a release-to-release breakage. Worth checking before blaming this config.
+
+## Not used, and why
+
+- **RustDesk** is structurally blocked here, not merely immature: it needs
+  portal protocols `xdg-desktop-portal-hyprland` does not implement.
+- **xrdp** is X11-only.
+- **wayvnc** works and is genuinely useful for *looking* at a session that has
+  gone wrong, but it is software-encoded and not pleasant for real use.
+- **Netbird's own SSH server** (`netbird up --allow-server-ssh`, native OpenSSH
+  integration since 0.60) would remove key management entirely — identity-aware
+  auth through the IdP, mapped to local users. Genuinely attractive for three
+  machines. Not used because it moves authorization from this repo's
+  `authorized_keys` to the management plane, which is a different trust model
+  from the one `core.nix` argues for. Reconsider if client key distribution
+  across three operating systems becomes the annoying part.

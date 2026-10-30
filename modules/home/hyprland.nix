@@ -1,7 +1,12 @@
 # Hyprland Wayland desktop: compositor config, bar, launcher, notifications,
 # lock/idle, and supporting utilities. System-level Hyprland (the session) is
 # enabled in modules/nixos/desktop.nix; here we own the per-user config.
-{ osConfig, pkgs, ... }:
+{
+  lib,
+  osConfig,
+  pkgs,
+  ...
+}:
 {
   wayland.windowManager.hyprland = {
     enable = true;
@@ -237,28 +242,59 @@
       general = {
         lock_cmd = "pidof hyprlock || hyprlock";
         before_sleep_cmd = "loginctl lock-session";
+
+        # What makes `loginctl unlock-session` actually unlock, and the reason
+        # it is here rather than in modules/nixos/remote.nix: hypridle is the
+        # thing subscribed to logind's D-Bus lock/unlock signals, so without an
+        # unlock_cmd the unlock event arrives and nothing happens. Locking
+        # worked and unlocking silently did not.
+        #
+        # That matters for remote access specifically. The machine locks itself
+        # after five minutes whether or not anybody is coming back, and the
+        # alternative way in — typing the passphrase into hyprlock through the
+        # video stream — depends on the capture backend being able to see a
+        # session-locked screen, which is exactly the thing Hyprland's
+        # session-lock protocol is designed to prevent other clients from
+        # doing. An SSH connection is already authenticated by a key, so
+        # unlocking over it is both more reliable and no weaker.
+        #
+        # SIGUSR1, not a kill: it is hyprlock's clean-unlock signal. Killing
+        # the process while an ext-session-lock is held leaves the compositor
+        # locked with no client to draw it — the "lockscreen app died" screen.
+        # Absolute path: hypridle runs this through a shell whose PATH is the
+        # user unit's, and psmisc is not otherwise installed here.
+        unlock_cmd = "${pkgs.psmisc}/bin/killall -q -s SIGUSR1 hyprlock";
       };
+      # The LOCK listener is unconditional; the SLEEP one is not.
+      #
+      # my.power.remoteAccess drops the sleep listener entirely (and
+      # modules/nixos/power.nix neutralises the lid alongside it), because a
+      # machine that suspends ten minutes after you walk away is a machine you
+      # cannot connect to — suspending drops the overlay tunnel and nothing can
+      # wake it remotely. Locking still happens on the same five-minute timer,
+      # so walking away still secures the screen; it just stays awake behind
+      # the lock, and unlock_cmd above is how you get back in.
       listener = [
         {
           timeout = 300; # lock after 5 min idle
           on-timeout = "hyprlock";
         }
-        {
-          timeout = 600; # sleep after 10 min idle
-          # suspend-then-hibernate once there is a swapfile to hibernate into
-          # (my.power.hibernate.enable, modules/nixos/power.nix). Plain suspend
-          # keeps drawing power, so a machine left idle on battery eventually
-          # dies and loses the session — which is the whole thing hibernation
-          # is here to fix, and it is pointless to fix the lid but not the
-          # idle timeout. before_sleep_cmd above locks the session either way,
-          # so resuming lands on hyprlock rather than in the session.
-          on-timeout =
-            if osConfig.my.power.hibernate.enable then
-              "systemctl suspend-then-hibernate"
-            else
-              "systemctl suspend";
-        }
-      ];
+      ]
+      ++ lib.optional (!osConfig.my.power.remoteAccess) {
+        timeout = 600; # sleep after 10 min idle
+        # suspend-then-hibernate once there is a swapfile to hibernate into
+        # (my.power.hibernate.enable, modules/nixos/power.nix). Plain suspend
+        # keeps drawing power, so a machine left idle on battery eventually
+        # dies and loses the session — which is the whole thing hibernation
+        # is here to fix, and it is pointless to fix the lid but not the
+        # idle timeout. before_sleep_cmd above locks the session either way,
+        # so resuming lands on hyprlock rather than in the session.
+        on-timeout =
+          if osConfig.my.power.hibernate.enable then
+            "systemctl suspend-then-hibernate"
+          else
+            "systemctl suspend";
+      };
     };
   };
 

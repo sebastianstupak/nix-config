@@ -22,6 +22,7 @@
     ../../modules/nixos/power.nix # battery thresholds, lid, hibernation (docs/POWER.md)
     ../../modules/nixos/containers.nix # rootless podman
     ../../modules/nixos/netbird.nix # mesh VPN
+    ../../modules/nixos/remote.nix # SSH + Sunshine over the overlay (docs/REMOTE.md)
     ../../modules/nixos/backup.nix # restic (inert until my.backup.repository is set)
     ../../modules/nixos/syncthing.nix # peer-to-peer sync (inert until my.syncthing.enable)
     # Pro-audio + Ableton via shibco/ableton-linux. Measured before enabling:
@@ -45,6 +46,52 @@
   # not something a machine should acquire by importing a file. See
   # docs/GAMING.md.
   my.gaming.enable = true;
+
+  # Remote access, so one machine can drive another: SSH for terminals (which is
+  # what `herdr` sessions are reached over — modules/home/herdr.nix) and
+  # Sunshine for the desktop. Shared, because the useful arrangement is every
+  # machine reachable from every other; the mechanism and the reasoning about
+  # scoping it to the overlay live in modules/nixos/remote.nix, and the
+  # first-time pairing walkthrough in docs/REMOTE.md.
+  my.remote = {
+    enable = true;
+
+    # Client keys. One line per machine you connect FROM — add the Windows and
+    # macOS ones here as they appear, rather than appending to
+    # ~/.ssh/authorized_keys on each host and losing it at the next reinstall.
+    authorizedKeys = [
+      # hestia (HP ZBook Firefly 14 G10) — ~/.ssh/id_ed25519.pub
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIECIb5oKGEB0UvtftQq+jaZb4L31w5ETVliC3NsFQAc7 sebastianstupak@datadir.co"
+    ];
+
+    # Peer HOST keys, so there is never a trust-on-first-use prompt to click
+    # through. Get a new machine's with `cat /etc/ssh/ssh_host_ed25519_key.pub`
+    # ON that machine, and its overlay name and address from `netbird status`.
+    peers = {
+      hestia = {
+        hostNames = [
+          "workstation-98-165.netbird.cloud"
+          "100.94.98.165"
+        ];
+        publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAyCoT427eImjRO7gZhcsx4ylFzunEbDOLlcPXxC9gv workstation-intel";
+      };
+
+      # zagreus's host key has not been collected yet — run the command above on
+      # it and add the entry. Until then, connecting TO zagreus prompts to
+      # accept its key; everything else here works.
+      # zagreus = {
+      #   hostNames = [ "<fqdn>.netbird.cloud" "100.x.y.z" ];
+      #   publicKey = "ssh-ed25519 ...";
+      # };
+    };
+  };
+
+  # Stay reachable: no suspend on lid close, no suspend on idle. This is the
+  # half of my.remote that lives in the power module, because a suspended
+  # machine cannot be woken over an overlay network — see my.power.remoteAccess
+  # for what it costs (a laptop that will flatten itself if left closed in a
+  # bag) and docs/POWER.md.
+  my.power.remoteAccess = true;
 
   # Backups. One shared restic repository for every machine here — restic
   # deduplicates across the whole thing, so the licensed artifacts and dotfiles
@@ -144,6 +191,13 @@
       # that disabled docker. It grants the ROOTFUL socket; the rootless one
       # this user's test suites actually use needs no group at all.
       "podman"
+
+      # Sunshine's virtual mouse and keyboard (modules/nixos/remote.nix).
+      # Without it the stream is read-only: you see the desktop and cannot
+      # click anything, which looks like a broken client rather than a missing
+      # group. The group itself comes from hardware.uinput.enable, which the
+      # Sunshine module turns on for us.
+      "uinput"
     ];
 
     # Containers outlive the login session. Without lingering the user's

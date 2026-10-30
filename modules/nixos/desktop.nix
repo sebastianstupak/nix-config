@@ -66,8 +66,18 @@
   # PAM unlocks the keyring with the password already typed at greetd, so there
   # is no second prompt at login. Without that line the daemon runs but the
   # keyring stays locked, which fails in a more confusing way than not having it.
+  #
+  # hyprlock gets the same line, for the session that is NOT a fresh login.
+  # greetd only unlocks the keyring at the start of a session; when the screen
+  # locks later and is unlocked again — including remotely, over SSH, with
+  # `loginctl unlock-session` (modules/nixos/remote.nix) — PAM runs for
+  # hyprlock, not for greetd. Without this the keyring that greetd opened stays
+  # open, which is fine, but a session whose keyring was never opened by a typed
+  # password has no second chance to open it. Cheap, and it makes unlocking the
+  # screen and unlocking the keyring the same act however you arrived.
   services.gnome.gnome-keyring.enable = true;
   security.pam.services.greetd.enableGnomeKeyring = true;
+  security.pam.services.hyprlock.enableGnomeKeyring = true;
 
   # A system Chrome, where tools that hardcode the FHS path expect to find one.
   #

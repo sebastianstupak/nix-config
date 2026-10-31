@@ -247,21 +247,27 @@ in
       };
     };
 
-    # mDNS, and why it is left publishing.
+    # mDNS: SUPPRESSED, not left at the module's default.
     #
-    # The Sunshine module turns on `services.avahi.publish` (mkDefault), which
-    # means this host starts advertising a Sunshine service record on every
-    # network it joins — including the café ones the comment at the top of this
-    # file is about. Kept rather than suppressed, because Moonlight's
-    # auto-discovery is the thing that makes pairing painless, and the leak is
-    # an information leak and not an opening: the ports are shut on every
-    # interface but the overlay, so a stranger learns that a machine runs
-    # Sunshine and gets refused at the door. Set
-    # `services.avahi.publish.enable = false` to trade discovery for silence —
-    # adding the host by its overlay IP in Moonlight still works.
+    # The Sunshine module turns `services.avahi.publish` on (mkDefault), which
+    # makes this host advertise a Sunshine service record — its hostname and the
+    # fact that it runs a remote-desktop server — on every network it joins,
+    # café and hotel ones included. That is pure cost here, because NOTHING IN
+    # THIS SETUP USES DISCOVERY: pairing happens over an SSH tunnel to localhost
+    # (origin_web_ui_allowed below) and Moonlight connects by overlay IP, which
+    # is typed in by hand once. Broadcasting to strangers buys a convenience we
+    # deliberately do not use.
     #
-    # Avahi itself is already on for printer discovery (modules/nixos/desktop.nix).
-    services.avahi.publish.enable = true;
+    # This does NOT affect printing. Avahi stays enabled with nssmdns4
+    # (modules/nixos/desktop.nix) and printer discovery is BROWSING — asking
+    # what else is on the network. Publishing is the opposite direction:
+    # advertising our own services. Only the latter is turned off, and only
+    # CUPS printer SHARING would have wanted it, which we do not do.
+    #
+    # The cost is one benign log line at startup,
+    # `avahi::entry_group_new() failed: Not permitted`, which is Sunshine
+    # noticing it cannot advertise and carrying on.
+    services.avahi.publish.enable = false;
 
     # The virtual output, created before Sunshine looks for it.
     #

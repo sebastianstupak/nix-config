@@ -46,15 +46,60 @@
   # No secrets are declared yet, so this is currently a no-op. To add one, see
   # secrets/README.md. openssh is enabled so the host key exists to derive from.
   #
-  # Enabled for that key and nothing else — this machine is never SSHed into.
-  # Left at the defaults it also opened port 22 and accepted passwords, which on
-  # a laptop that joins café and hotel networks is a password-guessable service
-  # offered to every other device on the LAN. The service still runs so the host
-  # key is generated and rotated as usual; it is simply unreachable.
+  # THIS MACHINE IS NOW SSHED INTO — see modules/nixos/remote.nix, which opens
+  # port 22 on the Netbird interface and nothing else. It used to say the
+  # opposite, and the hardening below is what makes that change a small one.
+  #
+  # openFirewall stays false regardless. Left at the defaults sshd would open
+  # port 22 on every interface and accept passwords, which on a laptop that
+  # joins café and hotel networks is a password-guessable service offered to
+  # every stranger on the LAN. remote.nix opens it per-interface instead, so the
+  # physical NICs still see a closed port. The service also has to run for the
+  # host key to exist, which is what sops derives this machine's age key from.
   services.openssh = {
     enable = true;
     openFirewall = false;
-    settings.PasswordAuthentication = false;
+
+    settings = {
+      # Keys only. The single most important line here.
+      PasswordAuthentication = false;
+
+      # And the one people forget: with PAM in the stack, keyboard-interactive
+      # is a SECOND password path that PasswordAuthentication = false does not
+      # close. Leaving it on makes the line above decorative.
+      KbdInteractiveAuthentication = false;
+
+      # "no", not the "prohibit-password" default. There is no reason to reach
+      # root directly when the user is a wheel member with sudo, and this way a
+      # stolen root-authorized key is not a thing that can exist.
+      PermitRootLogin = "no";
+
+      # An allowlist of one. mutableUsers = false means the declared users are
+      # the only users, but system accounts still exist and may gain shells as
+      # packages come and go; this makes the set of accounts that can log in
+      # over the network a deliberate choice rather than a consequence.
+      AllowUsers = [ "sebastianstupak" ];
+
+      # Refuse to forward the agent, which matters specifically BECAUSE of
+      # modules/home/security.nix: gpg-agent there holds the ed25519 key that
+      # signs commits. A forwarded agent is usable by anything with root on the
+      # far end for as long as the connection is open — it signs as you without
+      # the key ever leaving, which is precisely the problem. Each machine
+      # already has its own key, so the alternative costs nothing. Listing all
+      # of them in allowed_signers is how commits stay verifiable.
+      AllowAgentForwarding = false;
+
+      # TCP forwarding is deliberately LEFT ON (sshd's default). It is how the
+      # Sunshine web UI is reached for pairing without exposing it on the
+      # overlay at all — see origin_web_ui_allowed in remote.nix and the
+      # `ssh -L` command in docs/REMOTE.md.
+
+      X11Forwarding = false;
+
+      # Both are near-irrelevant with passwords off, and both are free.
+      MaxAuthTries = 3;
+      LoginGraceTime = 30;
+    };
   };
   sops.age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
   # ------------------------------------------------------------------------

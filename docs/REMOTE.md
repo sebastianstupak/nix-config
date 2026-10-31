@@ -29,6 +29,32 @@ Find a machine's address with:
 netbird status          # "NetBird IP" and "FQDN"
 ```
 
+## The firewall trusts the whole overlay — Netbird's policy is the real control
+
+**Read this before adding peers.** `my.remote` opens port 22 on `wt0`, and that
+rule does not distinguish between peers: *every* machine on the Netbird network
+can reach SSH and Sunshine's control ports. At the time of writing this network
+had **seven** peers, not two.
+
+That is a deliberate split of responsibilities, not an oversight. The firewall
+answers "which interface", and Netbird answers "which peer" — because peers are
+identified by enrolled identity, which is exactly what an access policy should
+key on. The thing to **not** do is pin the firewall to peer IPs: Netbird hands
+those out from its management plane and a re-enrolled peer gets a new one, so
+the rule would silently either stop matching (locking you out) or keep matching
+an address that now belongs to something else.
+
+So set the policy in the NetBird dashboard: replace the default
+all-peers-to-all-peers rule with one that allows only your own machines, and
+narrow it to TCP 22 and Sunshine's ports rather than "all". Group your laptops
+and write the policy against the group, so adding a third machine is one
+membership change.
+
+What stands between a hostile overlay peer and this machine if you skip that:
+key-only SSH with one permitted user, no root login, no keyboard-interactive
+fallback, and Sunshine refusing to stream to anything unpaired. That is a real
+defence, not a trivial one — but it is one layer where there should be two.
+
 ## Terminal
 
 ```bash
@@ -202,9 +228,9 @@ mentioned above, they are not relevant." Specifically:
   a one-time cost in a background user service at session start, so nothing
   waits on it — but it does mean Sunshine is not connectable the instant you
   log in.
-- **`avahi::entry_group_new() failed: Not permitted`** means
-  `services.avahi.publish` is off. `remote.nix` turns it on; if you see this,
-  the generation you are running predates that.
+- **`avahi::entry_group_new() failed: Not permitted`** is Sunshine noticing it
+  may not advertise itself over mDNS, and carrying on. That is the intended
+  state — see the mDNS note above.
 - **Black frames are an Nvidia problem**, not a Hyprland one: the `wlr` backend
   cannot read Nvidia's tiled framebuffer layout. Neither machine here has one.
 - **Sunshine's user unit needs `graphical-session.target` to actually be
@@ -212,12 +238,12 @@ mentioned above, they are not relevant." Specifically:
   starts because nothing starts that target. `programs.hyprland.withUWSM`
   (`modules/nixos/desktop.nix`) is why that does not apply here — if Sunshine
   ever silently fails to start, check that first.
-- **mDNS keeps publishing.** The Sunshine module turns on `services.avahi.publish`,
-  so this host advertises a Sunshine record on every network it joins, café ones
-  included. Kept, because it is what makes Moonlight discovery painless, and the
-  ports are shut everywhere but the overlay — a stranger learns a machine runs
-  Sunshine and gets refused. Set `services.avahi.publish.enable = false` to trade
-  discovery for silence; adding the host by overlay IP still works.
+- **mDNS publishing is off on purpose.** The Sunshine module would turn it on,
+  advertising this host's name and the fact that it runs a remote-desktop
+  server on every network it joins. Nothing here uses discovery — pairing goes
+  through an SSH tunnel to localhost and Moonlight connects by overlay IP — so
+  it was pure cost. Printing is unaffected: that needs avahi *browsing*, which
+  stays on; only *publishing* is disabled.
 - **`nixpkgs`' Sunshine module is a moving target** —
   [#433058](https://github.com/NixOS/nixpkgs/issues/433058) tracks module and
   settings limitations, and [#475181](https://github.com/NixOS/nixpkgs/issues/475181)

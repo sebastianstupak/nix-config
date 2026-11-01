@@ -32,7 +32,7 @@ needed:
 | recipient | source | why |
 | --- | --- | --- |
 | `zagreus` | host key `/etc/ssh/ssh_host_ed25519_key` on the AMD HP laptop | sops-nix decrypts as root at activation (`sops.age.sshKeyPaths`, `modules/nixos/core.nix`). Without it the machine cannot read its own secrets at boot. |
-| `desktop` | host key of the Intel machine (SK hynix PC801) | same mechanism, different host key. Was called `workstation_intel` while it booted `hosts/zagreus/`; renamed when it got `hosts/hestia/`. The key material did not change — the anchor is just a name. |
+| `hestia` | host key of the Intel machine (SK hynix PC801) | same mechanism, different host key. Was called `workstation_intel` while it booted `hosts/zagreus/`; renamed when it got `hosts/hestia/`. The key material did not change — the anchor is just a name. |
 | `sebastianstupak` | standalone age key `~/.config/sops/age/keys.txt` | `sops` runs as you and cannot read the root-owned host key. Without it you could create a secret and never reopen it. |
 
 ### The lockout
@@ -65,8 +65,9 @@ passphrase support, so an ssh-derived recipient would encrypt to something
 nothing can decrypt. sops cannot consume the ssh key as an age identity either.
 
 `~/.config/sops/age/keys.txt` is **not** in this repo and is not reproducible —
-it is machine-local secret material, mode 600. Back it up somewhere safe: lose
-it and you can still decrypt via the host key with `sudo`, but lose both and
+it is machine-local secret material, mode 600. It is THE thing to keep in the
+password manager — see "What to keep OUTSIDE these machines" below. Lose it and
+you can still decrypt via a host key with `sudo`; lose it and the machines and
 the secrets are gone. Regenerate a replacement with `age-keygen`, then update
 `.sops.yaml` and run `sops updatekeys secrets/<file>`.
 
@@ -77,60 +78,101 @@ nix run nixpkgs#ssh-to-age -- -i /etc/ssh/ssh_host_ed25519_key.pub  # host
 grep 'public key' ~/.config/sops/age/keys.txt                       # user
 ```
 
-## What to keep OUTSIDE these machines
+## What to keep OUTSIDE these machines — one key, nothing else
 
-The lockout above is about one machine losing access. This is about the worse
-case: **both laptops gone.** Restoring from backup needs the restic password,
-which lives in sops, which needs the age key — which was on the laptops. Until
-the first two items below live somewhere else, the backups are decorative.
+**There is exactly one thing to store in the password manager: your age key.**
+Everything else either lives inside sops (so that key recovers it) or can be
+regenerated. If the list ever grows past one item, something has gone wrong.
 
-Keep them in the password manager. Most are one value shared by every machine,
-so do **not** prefix those per host — naming a single restic password
-`hestia-restic` invites a `zagreus-restic` duplicate that drifts the first time
-it is rotated.
+That is not a simplification of a complicated scheme; it is how it already
+works. Each machine decrypts with its own SSH host key, derived to an age
+identity by sops-nix — that is the one key per device, and it never leaves the
+device. Your personal age key is the human equivalent, and it is the only one
+that has to survive the machines.
 
-**Shared — one value, every machine. Prefix `nixcfg/`.**
+### The one item
 
-1. `nixcfg/age-key` — secure note, multi-line. The master key for everything in
-   here. Machines do not need it (they decrypt with host keys); you do, and
-   without it a reinstalled host can never be re-keyed.
-2. `nixcfg/restic-password` — the other half of the recovery path.
-3. `nixcfg/restic-s3-env` — secure note.
-4. `netbird/setup-key` — needed out-of-band precisely when sops cannot help: a
-   freshly installed machine has a new host key, is not yet a recipient, and
-   so cannot decrypt the key it needs in order to join the network.
-
-**Per host — genuinely different on each machine.** Prefix `hestia/`,
-`zagreus/`.
-
-5. `<host>/login-password` — only the hash is in sops, so the plaintext exists
-   nowhere else. Also the VNC password, since wayvnc authenticates through PAM.
-   Shared today; becomes per-host after "Splitting a host's password" below.
-6. `<host>/sunshine-web-ui` — hashed in `~/.config/sunshine/sunshine_state.json`.
-7. `<host>/ssh-key-passphrase` — for `~/.ssh/id_ed25519`, stored nowhere.
-
-Items 1-4 can be re-copied from the repo; 5-7 cannot be recovered at all.
-
-### Getting them to the clipboard
-
-Run from the repo root. **`--sensitive` is not optional**: a
-`wl-paste --watch cliphist store` daemon runs on these machines and its
-database is world-readable, so anything copied without the hint is logged in
-plaintext for every local process to read.
+**`nixcfg/age-key`** — a Proton Pass **secure note** (it is multi-line; login
+items mangle that).
 
 ```bash
 wl-copy --sensitive < ~/.config/sops/age/keys.txt
-sops -d --extract '["restic-password"]' secrets/common/backup.yaml | wl-copy -n --sensitive
-sops -d --extract '["restic-env"]'      secrets/common/backup.yaml | wl-copy --sensitive
-sops -d --extract '["setup-key"]'       secrets/common/netbird.yaml | wl-copy -n --sensitive
 ```
 
+`--sensitive` is not optional: a `wl-paste --watch cliphist store` daemon runs
+on these machines and its database is world-readable, so anything copied
+without the hint is logged in plaintext for every local process to read.
 Afterwards:
 
 ```bash
 wl-copy --clear
-cliphist list | head     # nothing secret should appear; `cliphist wipe` if it does
+cliphist list | head        # nothing secret should appear; `cliphist wipe` if it does
 ```
+
+### Restoring it on a new or rebuilt machine
+
+```bash
+mkdir -p ~/.config/sops/age
+# paste the note from Proton Pass:
+wl-paste > ~/.config/sops/age/keys.txt      # or: $EDITOR ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+
+# prove it before relying on it
+sops -d secrets/common/backup.yaml >/dev/null && echo "age key works"
+```
+
+### What it recovers
+
+Everything in `secrets/`, which is to say everything that matters:
+
+```bash
+sops -d --extract '["restic-password"]' secrets/common/backup.yaml   # restore backups
+sops -d --extract '["restic-env"]'      secrets/common/backup.yaml
+sops -d --extract '["setup-key"]'       secrets/common/netbird.yaml  # rejoin the VPN
+sops -d --extract '["work-url"]'        secrets/common/calendars.yaml
+```
+
+### The two things that must both survive
+
+The age key is half of it. The other half is **this repository on GitHub** —
+it holds the encrypted files the key opens. Neither is useful alone, so:
+
+- keep the key in Proton Pass, not on a machine, and
+- **push.** Unpushed changes to `secrets/` are the failure mode that looks
+  fine until it is not: the remote keeps an older ciphertext, and after a
+  re-key that older copy may be encrypted to recipients that no longer exist.
+
+### Deliberately NOT stored
+
+- **restic password, restic S3 env, netbird setup key** — all inside sops. The
+  age key already recovers them; a second copy is a second thing to rotate and
+  forget.
+- **Sunshine web UI password** — regenerate by deleting
+  `~/.config/sunshine/sunshine_state.json` and revisiting
+  `https://localhost:47990`, which prompts for new credentials.
+- **SSH key passphrase** — if lost, generate a new keypair and update
+  `my.remote.authorizedKeys`. The key is a credential, not an archive.
+
+### The one genuine gap: your login password
+
+`passwords.yaml` holds only the **hash**, because that is what NixOS consumes
+— so the plaintext exists nowhere, and it is also your VNC password (wayvnc
+authenticates through PAM). Losing it means resetting from a recovery boot.
+
+Close the gap by putting the plaintext beside the hash, which makes the age
+key sufficient for this too:
+
+```bash
+sops secrets/common/passwords.yaml
+# add alongside the existing hash:
+#   sebastianstupak-password: <the plaintext>
+```
+
+Nothing in Nix reads that value — `hashedPasswordFile` still points at the
+hash. It is there so a human with the age key can recover it. The trade is
+that a sops compromise yields the login password as well as the hash; given
+the same file set already yields the restic credentials and the VPN setup
+key, the blast radius does not meaningfully change.
 
 ## Splitting a host's password
 

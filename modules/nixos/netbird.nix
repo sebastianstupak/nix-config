@@ -78,7 +78,16 @@ in
 
     package = unstable.netbird;
 
-    clients.default.login.setupKeyFile = config.sops.secrets.netbird-setup-key.path;
+    # BOTH of these are required. `setupKeyFile` on its own does nothing: the
+    # module only generates the `netbird-login` oneshot for clients where
+    # `login.enable` is true (`filterAttrs (_: client: client.login.enable)`),
+    # so setting just the path produced a systemd unit byte-identical to the
+    # one without it. Caught by diffing the built unit for LoadCredential and
+    # finding none.
+    clients.default.login = {
+      enable = true;
+      setupKeyFile = config.sops.secrets.netbird-setup-key.path;
+    };
 
     # NO TRAY UI, and it is the package swap above that forced the decision.
     #

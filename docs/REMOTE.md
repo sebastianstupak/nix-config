@@ -6,8 +6,9 @@ Two separate things, and it is worth keeping them separate in your head:
 - **A terminal.** SSH, plus `herdr` sessions that were already running. This is
   what you want for Claude Code, and it is the one that works over a phone
   tether.
-- **A desktop.** Sunshine on the host, Moonlight on the client. Needed much
-  less often than it feels like it will be.
+- **A desktop.** Two protocols, deliberately — Sunshine where it is good,
+  VNC where it is the only thing that works. See "Desktop across three
+  operating systems" below for why that is not redundancy.
 
 The mechanism and the reasoning live in `modules/nixos/remote.nix`. This file is
 the walkthrough.
@@ -46,9 +47,39 @@ an address that now belongs to something else.
 
 So set the policy in the NetBird dashboard: replace the default
 all-peers-to-all-peers rule with one that allows only your own machines, and
-narrow it to TCP 22 and Sunshine's ports rather than "all". Group your laptops
-and write the policy against the group, so adding a third machine is one
-membership change.
+narrow it to the ports below rather than "all". Group your machines and write
+the policy against the group, so adding a fourth is one membership change.
+
+Policies are **port-scoped and one-way**, which is what makes mesh membership a
+small grant rather than a large one. Access controls, groups, networks and
+routes are all in NetBird's **free tier** (5 users / 100 machines); only device
+approval and posture checks are paid.
+
+| | source → destination | protocol / ports |
+| --- | --- | --- |
+| your own machines | `me-devices → me-devices`, bidirectional | TCP 22 · TCP 47984, 47989, 47990, 48010 · UDP 47998-48002, 48010 · TCP 5900 (VNC) · TCP 3389 (if an RDP target) |
+| collaborators | `collaborators → forgejo`, one-way | TCP 3000, 2222 |
+| collaborators | `collaborators → woodpecker`, one-way | TCP 8000 |
+
+**There is deliberately no policy granting `collaborators → me-devices`.** That
+is the access split: these machines are not merely firewalled from
+collaborators, they are unreachable — and NetBird enforces that *in the data
+path*, by programming nftables on each host, not as a dashboard preference.
+
+**Never disable NetBird's client firewall management.** With it off, no policy
+is applied at all and any peer on the tunnel is unfiltered.
+
+### What this does NOT protect
+
+Worth writing down, because it is the gap that survives everything above:
+**none of the desktop protocols have a strong credential story.** Sunshine
+pairing is a certificate on disk, VNC is the login password, RDP is a Windows
+password, Screen Sharing is a macOS password. A compromised machine that is
+paired with another can read its screen and inject input.
+
+So keep the set of machines paired for *desktop* access deliberately smaller
+than the set that can SSH. Desktop control is the more powerful grant and it has
+the weaker credential.
 
 What stands between a hostile overlay peer and this machine if you skip that:
 key-only SSH with one permitted user, no root login, no keyboard-interactive
@@ -96,7 +127,104 @@ the event lands nowhere.
 Unlocking this way also opens the GNOME keyring, via
 `security.pam.services.hyprlock.enableGnomeKeyring`.
 
-## Desktop
+## Desktop across three operating systems
+
+The fleet has NixOS, Windows and macOS machines, and **every one of them is both
+a client and a target**. No single remote-desktop protocol has a good host on
+all three, so there are two. This section is the decision record — the reasoning
+is more useful than the conclusion, because the conclusion will change when the
+tooling does.
+
+### The matrix
+
+| protocol | Hyprland host | Windows host | macOS host |
+| --- | --- | --- | --- |
+| **Sunshine / Moonlight** | ✅ excellent | ✅ its best platform | ⚠️ Experimental |
+| **VNC** | ✅ wayvnc (wlroots-native) | ✅ UltraVNC / TightVNC | ✅ **built in** |
+| **RDP** | ⚠️ nothing mature | ✅ native | ❌ no server exists |
+
+So: **Sunshine for NixOS and Windows, VNC for the Mac**, with VNC also serving
+as the universal fallback when Sunshine will not come up.
+
+### Why not one protocol
+
+**Hyprland is the constraint, not the tooling.** It implements the `wlr-*`
+protocols but not the full `xdg-desktop-portal` surface that general-purpose
+remote desktop software expects. What works on it is wlroots-native: Sunshine's
+`wlr` capture backend, and wayvnc.
+
+Checked and rejected:
+
+- **RustDesk** — the obvious "one tool everywhere" candidate, and structurally
+  blocked here: it needs portal protocols `xdg-desktop-portal-hyprland` does
+  not implement. There is a PR, described upstream as mostly dead.
+- **NoMachine 10** — EU company, excellent performance, would have been ideal.
+  Officially KDE/GNOME only; users report **blank screens on Hyprland, Sway and
+  Niri**. Also discontinued its free edition in v10.
+- **Sunshine on macOS** — marked *Experimental* upstream. It is not hopeless:
+  hardware encode works via VideoToolbox, and the missing Command key has a
+  documented workaround (**Right-Option maps to CMD**). The disqualifier is
+  that **Sunshine cannot create a virtual display on macOS** — there is no
+  `hyprctl output create headless` equivalent — so a lid-closed Mac has nothing
+  to capture. Apple's Screen Sharing works headless and handles ⌘ natively.
+- **RDP everywhere** — appealing because every OS ships a client, and RDP is a
+  perfectly good protocol when it is not exposed to the internet (its
+  reputation is about public exposure, not design). Dead because macOS cannot
+  host RDP at all. Worth watching:
+  [`lamco-rdp-server`](https://github.com/lamco-admin/lamco-rdp-server), a
+  Rust/IronRDP Wayland-native server that explicitly supports Hyprland — but at
+  ~34 commits it is far too young for this path, and it would not cover macOS
+  anyway.
+- **VNC only, everywhere** — genuinely uniform and a legitimate choice. Rejected
+  as the default because it would make the two machines we care about most
+  worse: no hardware encode on the Windows/macOS legs, no audio, higher latency.
+  It is kept as the fallback rather than the primary.
+
+### What to install, per machine
+
+| machine | as a target | as a client |
+| --- | --- | --- |
+| **NixOS** | nothing — Sunshine + wayvnc are in this config | `moonlight-qt`, plus a VNC client |
+| **Windows** | Sunshine, **or** enable native RDP (Pro/Enterprise only) | Moonlight; Microsoft Remote Desktop for RDP targets |
+| **macOS** | **System Settings → General → Sharing → Screen Sharing.** Nothing to install | Moonlight; Screen Sharing app or any VNC client |
+
+Netbird's client is the one mandatory install everywhere — without it there is
+no route at all.
+
+### wayvnc specifics
+
+Enabled by `my.remote.vnc.enable`. Three things worth knowing:
+
+**Authentication is your normal login password.** The config sets
+`enable_pam=true`, which makes wayvnc authenticate against the real account via
+PAM. This is deliberate and not just convenience: wayvnc's `enable_auth`
+otherwise requires a literal `password=` in its config file, and that file is
+generated into the Nix store, which is world-readable. PAM means no new
+credential exists anywhere. Username is `sebastianstupak`, password is the one
+from `secrets/README.md`.
+
+**It is encrypted, and unauthenticated connections are refused.** The server
+offers VeNCrypt (TLS) and RSA-AES and does *not* offer RFB security type 1
+("None"). A self-signed certificate is generated on first start into
+`~/.config/wayvnc/` (key at 0600) — self-signed because no CA can meaningfully
+vouch for a laptop, and the client is always one of ours, so it is a transport
+key rather than an identity claim. Clients warn on first connect; that is
+expected.
+
+**H.264 only helps with some clients.** `--gpu` enables the OpenH264 RFB
+extension, but only **TigerVNC and noVNC** negotiate it. Apple's built-in
+viewer and most others fall back to Tight — still works, just software-encoded.
+So use TigerVNC when connecting *to* a Nix box if you want the accelerated path.
+
+### Connecting
+
+```bash
+# Sunshine (NixOS/Windows targets) — Moonlight, host = overlay IP
+# VNC (any target)
+vncviewer 100.94.98.165:5900          # TigerVNC; asks for your login password
+```
+
+## Desktop (Sunshine)
 
 ### Pairing (once per client)
 

@@ -142,6 +142,30 @@ in
         monitor, not a second login.
       '';
     };
+
+    vnc.enable = lib.mkEnableOption ''
+      wayvnc alongside Sunshine, as the protocol that works EVERYWHERE.
+
+      Sunshine is better on every axis that matters for a desktop — hardware
+      encode, audio, latency — and it is the right default. But it only has a
+      good host on Linux and Windows. A fleet that also has a Mac as a TARGET
+      cannot be served by it: Sunshine's macOS host is marked Experimental
+      upstream, forwards no Command key (Right-Option substitutes), and cannot
+      create a virtual display, so a lid-closed Mac has nothing to capture.
+
+      VNC is the only protocol with a first-class host on all three: wayvnc
+      here, a third-party server on Windows, and Apple's BUILT-IN Screen
+      Sharing on macOS — which is the strongest support story available, since
+      it is already installed and handles Command natively.
+
+      So this is not a second-rate duplicate of Sunshine. It is the lowest
+      common denominator that lets one client reach every machine, and the
+      thing to fall back on when Sunshine will not come up — the Hyprland
+      forum's standing advice for exactly that ("if you really need to see
+      what's on your desktop, wayvnc for the host is really useful").
+
+      See docs/REMOTE.md for the protocol matrix and the per-OS host setup.
+    '';
   };
 
   config = lib.mkIf cfg.enable {
@@ -172,7 +196,8 @@ in
         0
         1
         21
-      ];
+      ]
+      ++ lib.optional cfg.vnc.enable 5900;
       allowedUDPPorts = sunshinePorts [
         9
         10
@@ -296,5 +321,86 @@ in
         ExecStop = "${hyprctl} output remove remote";
       };
     };
+
+    # --- wayvnc -------------------------------------------------------------
+    # The cross-platform fallback. See my.remote.vnc.enable for why it exists
+    # at all when Sunshine is better, and docs/REMOTE.md for the matrix.
+    #
+    # AUTHENTICATION IS PAM, which is the whole reason this needs no secret.
+    # wayvnc's `enable_auth` otherwise demands a literal `password` in its
+    # config file — and this config file is generated into the Nix store, which
+    # is WORLD-READABLE, so a password there would be a password published to
+    # every user and every process on the machine. `enable_pam` overrides
+    # username/password entirely and authenticates against the real account
+    # instead, so the credential is the one already managed via
+    # hashedPasswordFile (secrets/README.md) and nothing new is stored anywhere.
+    #
+    # Without authentication wayvnc hands the desktop to anyone who can open
+    # the port, with no credential at all. The port is overlay-only, but the
+    # overlay is exactly where collaborators live, so "the network is the
+    # auth" is not a position this can take.
+    security.pam.services.wayvnc = lib.mkIf cfg.vnc.enable { };
+
+    systemd.user.services.wayvnc = lib.mkIf cfg.vnc.enable {
+      description = "wayvnc — VNC server for the running Hyprland session";
+      wantedBy = [ "graphical-session.target" ];
+      partOf = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+
+      serviceConfig = {
+        # TLS material is generated here rather than declared, because a private
+        # key in the Nix store is a published private key. Self-signed: there is
+        # no CA that could meaningfully vouch for a laptop, and the client is
+        # always one of ours, so the certificate is a transport key rather than
+        # an identity claim. Clients will warn on first connect — expected.
+        ExecStartPre = "${pkgs.writeShellScript "wayvnc-setup" ''
+          set -eu
+          dir="''${XDG_CONFIG_HOME:-$HOME/.config}/wayvnc"
+          mkdir -p "$dir"
+
+          if [ ! -s "$dir/key.pem" ] || [ ! -s "$dir/cert.pem" ]; then
+            ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:4096 -nodes \
+              -days 3650 -subj "/CN=${config.networking.hostName}" \
+              -keyout "$dir/key.pem" -out "$dir/cert.pem" 2>/dev/null
+          fi
+          chmod 600 "$dir/key.pem"
+
+          # Written here rather than shipped as a store path so the file paths
+          # can follow $HOME instead of being hardcoded. Rewritten every start,
+          # so this file is ours and hand edits do not survive — which is the
+          # point, it should match this module.
+          cat > "$dir/config" <<EOF
+          address=0.0.0.0
+          port=5900
+          enable_auth=true
+          enable_pam=true
+          certificate_file=$dir/cert.pem
+          private_key_file=$dir/key.pem
+          EOF
+          ${pkgs.gnused}/bin/sed -i 's/^[[:space:]]*//' "$dir/config"
+        ''}";
+
+        # --gpu enables the H.264 path (wayvnc 0.5+ speaks the OpenH264 RFB
+        # extension). Worth knowing it only helps with a client that negotiates
+        # it — TigerVNC and noVNC do; Apple's built-in viewer and most others
+        # fall back to Tight, which still works, just software-encoded.
+        #
+        # Binds 0.0.0.0 and relies on the per-interface firewall rule above,
+        # the same arrangement Sunshine ends up with. Binding the overlay
+        # address directly would be tighter but it is assigned by NetBird at
+        # runtime, so the service would fail to start whenever it came up
+        # before the tunnel.
+        ExecStart = lib.concatStringsSep " " [
+          "${pkgs.wayvnc}/bin/wayvnc"
+          "--gpu"
+          "--max-fps=60"
+          "--output=${if cfg.headlessOutput then "remote" else cfg.output}"
+          "0.0.0.0"
+        ];
+        Restart = "on-failure";
+        RestartSec = "5s";
+      };
+    };
+
   };
 }

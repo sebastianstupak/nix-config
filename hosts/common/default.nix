@@ -56,6 +56,15 @@
   my.remote = {
     enable = true;
 
+    # wayvnc as well as Sunshine, because the fleet includes a Mac as a TARGET
+    # and Sunshine cannot serve one properly — Experimental upstream, no
+    # Command key, and no virtual display so a closed lid has nothing to
+    # capture. VNC is the only protocol with a first-class host on Hyprland,
+    # Windows AND macOS (where it is built in). Sunshine stays the default for
+    # the machines it is good on; this is what makes one client reach them all.
+    # Protocol matrix and per-OS setup: docs/REMOTE.md.
+    vnc.enable = true;
+
     # Client keys. One line per machine you connect FROM — add the Windows and
     # macOS ones here as they appear, rather than appending to
     # ~/.ssh/authorized_keys on each host and losing it at the next reinstall.

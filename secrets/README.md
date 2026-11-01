@@ -77,6 +77,61 @@ nix run nixpkgs#ssh-to-age -- -i /etc/ssh/ssh_host_ed25519_key.pub  # host
 grep 'public key' ~/.config/sops/age/keys.txt                       # user
 ```
 
+## What to keep OUTSIDE these machines
+
+The lockout above is about one machine losing access. This is about the worse
+case: **both laptops gone.** Restoring from backup needs the restic password,
+which lives in sops, which needs the age key — which was on the laptops. Until
+the first two items below live somewhere else, the backups are decorative.
+
+Keep them in the password manager. Most are one value shared by every machine,
+so do **not** prefix those per host — naming a single restic password
+`hestia-restic` invites a `zagreus-restic` duplicate that drifts the first time
+it is rotated.
+
+**Shared — one value, every machine. Prefix `nixcfg/`.**
+
+1. `nixcfg/age-key` — secure note, multi-line. The master key for everything in
+   here. Machines do not need it (they decrypt with host keys); you do, and
+   without it a reinstalled host can never be re-keyed.
+2. `nixcfg/restic-password` — the other half of the recovery path.
+3. `nixcfg/restic-s3-env` — secure note.
+4. `netbird/setup-key` — needed out-of-band precisely when sops cannot help: a
+   freshly installed machine has a new host key, is not yet a recipient, and
+   so cannot decrypt the key it needs in order to join the network.
+
+**Per host — genuinely different on each machine.** Prefix `hestia/`,
+`zagreus/`.
+
+5. `<host>/login-password` — only the hash is in sops, so the plaintext exists
+   nowhere else. Also the VNC password, since wayvnc authenticates through PAM.
+   Shared today; becomes per-host after "Splitting a host's password" below.
+6. `<host>/sunshine-web-ui` — hashed in `~/.config/sunshine/sunshine_state.json`.
+7. `<host>/ssh-key-passphrase` — for `~/.ssh/id_ed25519`, stored nowhere.
+
+Items 1-4 can be re-copied from the repo; 5-7 cannot be recovered at all.
+
+### Getting them to the clipboard
+
+Run from the repo root. **`--sensitive` is not optional**: a
+`wl-paste --watch cliphist store` daemon runs on these machines and its
+database is world-readable, so anything copied without the hint is logged in
+plaintext for every local process to read.
+
+```bash
+wl-copy --sensitive < ~/.config/sops/age/keys.txt
+sops -d --extract '["restic-password"]' secrets/common/backup.yaml | wl-copy -n --sensitive
+sops -d --extract '["restic-env"]'      secrets/common/backup.yaml | wl-copy --sensitive
+sops -d --extract '["setup-key"]'       secrets/common/netbird.yaml | wl-copy -n --sensitive
+```
+
+Afterwards:
+
+```bash
+wl-copy --clear
+cliphist list | head     # nothing secret should appear; `cliphist wipe` if it does
+```
+
 ## Splitting a host's password
 
 Both hosts currently point `sebastianstupak-hash` at

@@ -28,7 +28,12 @@
 # Measured, not assumed — `netbird status --detail` reports `Connection type:
 # P2P` with real ICE candidates when this is right, and `Relayed` with `-/-`
 # when it is not.
-{ inputs, pkgs, ... }:
+{
+  config,
+  inputs,
+  pkgs,
+  ...
+}:
 let
   # Unstable, for the netbird packages ONLY. The stable channel ships 0.71.4,
   # which carries three HIGH advisories including a local privilege escalation
@@ -42,10 +47,38 @@ let
   unstable = inputs.nixpkgs-netbird.legacyPackages.${pkgs.stdenv.hostPlatform.system};
 in
 {
+  # The setup key, and why enrolment is not interactive.
+  #
+  # A peer enrolled by signing in through the browser is an SSO peer, and the
+  # account applies `peer_login_expiration` to those — 24 hours here. So every
+  # day the login expired and the machine sat there needing `netbird up` and a
+  # browser round-trip before any of this worked. The servers never did that,
+  # because they were enrolled with a setup key, which is exempt.
+  #
+  # A setup key also makes enrolment REPRODUCIBLE, which is the part that
+  # belongs in this repo: a reinstalled machine joins the network on first boot
+  # with no human at the keyboard, rather than needing someone to click through
+  # an identity provider before it has a route to anything.
+  #
+  # The key is reusable, non-ephemeral (ephemeral peers are deleted when they
+  # go offline — wrong for a laptop that gets closed), auto-joins `my-devices`,
+  # and expires 2027-11-01. Rotating it: create a new one in the dashboard,
+  # `sops secrets/common/netbird.yaml`, rebuild.
+  #
+  # It is a credential that can add a peer to the network, so it is encrypted
+  # to the two host keys and nothing else reads it: the file is root-owned 0400
+  # and consumed by the daemon, which already runs as root.
+  sops.secrets.netbird-setup-key = {
+    sopsFile = ../../secrets/common/netbird.yaml;
+    key = "setup-key";
+  };
+
   services.netbird = {
     enable = true;
 
     package = unstable.netbird;
+
+    clients.default.login.setupKeyFile = config.sops.secrets.netbird-setup-key.path;
 
     # NO TRAY UI, and it is the package swap above that forced the decision.
     #

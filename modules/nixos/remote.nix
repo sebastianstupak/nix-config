@@ -341,6 +341,13 @@ in
     # auth" is not a position this can take.
     security.pam.services.wayvnc = lib.mkIf cfg.vnc.enable { };
 
+    # For `wayvncctl`, not for wayvnc itself — the service runs the binary from
+    # the store by absolute path. wayvncctl is how the running server is
+    # inspected and steered (`output-list`, `output-set`, `attach`), which is
+    # exactly what you need when the stream shows the wrong screen, so having
+    # it only inside the unit's closure is useless.
+    environment.systemPackages = lib.mkIf cfg.vnc.enable [ pkgs.wayvnc ];
+
     systemd.user.services.wayvnc = lib.mkIf cfg.vnc.enable {
       description = "wayvnc — VNC server for the running Hyprland session";
       wantedBy = [ "graphical-session.target" ];

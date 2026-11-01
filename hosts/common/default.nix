@@ -76,10 +76,17 @@
     # Peer HOST keys, so there is never a trust-on-first-use prompt to click
     # through. Get a new machine's with `cat /etc/ssh/ssh_host_ed25519_key.pub`
     # ON that machine, and its overlay name and address from `netbird status`.
+    # The overlay FQDN is `<peer name>.netbird.cloud`, and the peer name is NOT
+    # the hostname — it is whatever the machine was called when it enrolled,
+    # and NetBird never updates it afterwards. Both of these enrolled while
+    # they still shared the name `workstation`, so NetBird disambiguated them
+    # by appending part of the overlay IP: `workstation-98-165.netbird.cloud`.
+    # Renamed in the dashboard to match the hostnames; rename there, not here,
+    # if a machine ever needs it again.
     peers = {
       hestia = {
         hostNames = [
-          "workstation-98-165.netbird.cloud"
+          "hestia.netbird.cloud"
           "100.94.98.165"
         ];
         publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAyCoT427eImjRO7gZhcsx4ylFzunEbDOLlcPXxC9gv workstation-intel";
@@ -87,9 +94,10 @@
 
       # zagreus's host key has not been collected yet — run the command above on
       # it and add the entry. Until then, connecting TO zagreus prompts to
-      # accept its key; everything else here works.
+      # accept its key; everything else here works. Its overlay address is
+      # already known: zagreus.netbird.cloud / 100.94.242.62.
       # zagreus = {
-      #   hostNames = [ "<fqdn>.netbird.cloud" "100.x.y.z" ];
+      #   hostNames = [ "zagreus.netbird.cloud" "100.94.242.62" ];
       #   publicKey = "ssh-ed25519 ...";
       # };
     };

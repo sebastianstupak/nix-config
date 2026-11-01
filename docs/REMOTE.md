@@ -30,6 +30,35 @@ Find a machine's address with:
 netbird status          # "NetBird IP" and "FQDN"
 ```
 
+### Peer names are not hostnames
+
+The overlay FQDN is `<peer name>.netbird.cloud`, and the peer name is whatever
+the machine was called **when it enrolled** — NetBird never updates it when the
+hostname changes. Both NixOS machines enrolled while they still shared the name
+`workstation`, so NetBird disambiguated them by appending part of the overlay
+IP, giving the memorable `workstation-98-165.netbird.cloud`. Renamed in the
+dashboard to `hestia` / `zagreus`; the FQDN follows immediately. Rename there,
+not in this repo.
+
+### Why you kept having to run `netbird up`
+
+Because the personal machines were enrolled **interactively via SSO**, and the
+account has `peer_login_expiration_enabled` with a 24-hour window — so every
+day the login expires and the peer demands a browser round-trip. The servers
+never did this because they were enrolled with **setup keys**, which are exempt.
+
+Fixed per-peer (`login_expiration_enabled: false`) on `my-devices` rather than
+account-wide, deliberately: the account-wide default should stay ON so that a
+collaborator's device still expires. Check with:
+
+```bash
+netbird status | grep -i expire   # or the Peers table in the dashboard
+```
+
+The durable alternative, if you ever want hands-off enrolment of a new machine,
+is `services.netbird.clients.default.login.setupKeyFile` pointing at a sops
+secret — that is how the servers were done.
+
 ## The firewall trusts the whole overlay — Netbird's policy is the real control
 
 **Read this before adding peers.** `my.remote` opens port 22 on `wt0`, and that
@@ -55,16 +84,28 @@ small grant rather than a large one. Access controls, groups, networks and
 routes are all in NetBird's **free tier** (5 users / 100 machines); only device
 approval and posture checks are paid.
 
-| | source → destination | protocol / ports |
-| --- | --- | --- |
-| your own machines | `me-devices → me-devices`, bidirectional | TCP 22 · TCP 47984, 47989, 47990, 48010 · UDP 47998-48002, 48010 · TCP 5900 (VNC) · TCP 3389 (if an RDP target) |
-| collaborators | `collaborators → forgejo`, one-way | TCP 3000, 2222 |
-| collaborators | `collaborators → woodpecker`, one-way | TCP 8000 |
+What is deployed today — groups `my-devices` (both laptops, the Windows box,
+the phone) and `infra` (forge, grafana, maethril-app, soul-siet):
 
-**There is deliberately no policy granting `collaborators → me-devices`.** That
-is the access split: these machines are not merely firewalled from
-collaborators, they are unreachable — and NetBird enforces that *in the data
-path*, by programming nftables on each host, not as a dashboard preference.
+| policy | source → destination | protocol / ports |
+| --- | --- | --- |
+| my-devices: remote access | `my-devices ↔ my-devices` | TCP 22, 3389, 5900, 47984, 47989, 47990, 48010 · UDP 47998-48002, 48010 · ICMP |
+| my-devices to infra | `my-devices → infra`, **one-way** | ALL |
+| infra internal | `infra ↔ infra` | ALL |
+| ~~Default~~ | ~~All ↔ All~~ | **disabled** |
+
+**There is deliberately no policy granting `infra → my-devices`,** and none
+granting collaborators anything yet. That absence is the access split: these
+machines are not merely firewalled from the rest of the overlay, they are
+unreachable — and NetBird enforces it *in the data path*, by programming
+nftables on each host, not as a dashboard preference. The proof when this was
+switched over: ICMP to forge went from 100% packet loss to 0% the moment the
+rule naming it was added.
+
+`infra internal` is the loose one. It exists only so that retiring the old
+all-to-all `Default` could not break server-to-server traffic (Woodpecker
+deploys) that rule had been carrying invisibly. Tighten it once those flows
+are enumerated.
 
 **Never disable NetBird's client firewall management.** With it off, no policy
 is applied at all and any peer on the tunnel is unfiltered.
@@ -89,7 +130,7 @@ defence, not a trivial one — but it is one layer where there should be two.
 ## Terminal
 
 ```bash
-ssh sebastianstupak@workstation-98-165.netbird.cloud
+ssh sebastianstupak@hestia.netbird.cloud
 herdr                   # attach to whatever was left running
 ```
 

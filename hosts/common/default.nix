@@ -71,6 +71,8 @@
     authorizedKeys = [
       # hestia (HP ZBook Firefly 14 G10) — ~/.ssh/id_ed25519.pub
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIECIb5oKGEB0UvtftQq+jaZb4L31w5ETVliC3NsFQAc7 sebastianstupak@datadir.co"
+      # apollo (Windows 11) — C:/Users/sebas/.ssh/aur_new.pub
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILxiZkJYemqt/AiVZhgY9l6Jdf/AFSWkWWERngflKmNs sebastian.stupak@pm.me"
     ];
 
     # Peer HOST keys, so there is never a trust-on-first-use prompt to click

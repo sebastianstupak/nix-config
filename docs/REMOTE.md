@@ -243,6 +243,18 @@ the PIN Moonlight shows into the web UI's PIN page.
 Pairing state lives in `~/.config/sunshine/`, not in the Nix-generated config,
 so it survives rebuilds.
 
+**Do not try to pair within a minute of Sunshine starting.** Moonlight's pair
+request times out after about 56 seconds, and Sunshine spends roughly 54
+probing encoders on startup — the two windows overlap almost exactly, so a
+pairing attempt against a just-restarted Sunshine fails with
+`QNetworkReply::OperationCanceledError` and no clue as to why. Confusingly the
+web UI answers the PIN with `{"status":true}` throughout, because it runs on a
+different thread from the pairing state machine. Wait for
+`Configuration UI available` in the journal, then pair.
+
+Verified end to end on 2026-11-01: Moonlight paired against the overlay
+address, `named_certs` showed the client, and it was then unpaired cleanly.
+
 ### Connecting
 
 Moonlight, on the overlay IP. You get the real session: the actual workspaces,

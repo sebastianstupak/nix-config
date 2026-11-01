@@ -6,6 +6,31 @@
     # in its own commit (see AGENTS.md). Switch to nixos-unstable for freshness.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
+    # Unstable, used for EXACTLY ONE PACKAGE and only because the stable channel
+    # is shipping a vulnerable one.
+    #
+    # netbird in nixos-26.05 is 0.71.4 — not merely stale, but affected by three
+    # HIGH advisories: GHSA-qcpp-8vwj-hhwr (local privilege escalation via an
+    # unauthenticated IPC socket, fixed 0.76.0), GHSA-xmg2-v32j-x2hf (SSH config
+    # `Match` line injection via a peer's FQDN, fixed 0.74.7) and
+    # GHSA-jxxc-7jxf-v8hm (vulnerable x/crypto/ssh paths, fixed 0.74.4), plus
+    # GHSA-7wwh-vfq4-v488 (netstack SOCKS5 bound to 0.0.0.0).
+    #
+    # The FQDN-injection one is the reason this could not wait: peers other
+    # people control are joining this network, and that advisory is precisely
+    # "a hostile peer hostname rewrites your SSH config".
+    #
+    # A `nix flake update` does NOT fix it. The nixos-26.05 BRANCH still carries
+    # 0.71.4 today, so bumping the lock changes nothing — which is why this is
+    # an extra input rather than a lockfile bump. Scoped to one package via
+    # services.netbird.package (modules/nixos/netbird.nix); nothing else in the
+    # system is built from unstable.
+    #
+    # REMOVE THIS once nixos-26.05 carries >= 0.76.1: drop the input, drop the
+    # `package` line in modules/nixos/netbird.nix, and check with
+    #   nix eval --raw github:NixOS/nixpkgs/nixos-26.05#netbird.version
+    nixpkgs-netbird.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";

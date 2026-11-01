@@ -28,9 +28,44 @@
 # Measured, not assumed — `netbird status --detail` reports `Connection type:
 # P2P` with real ICE candidates when this is right, and `Relayed` with `-/-`
 # when it is not.
-{ ... }:
+{ inputs, pkgs, ... }:
+let
+  # Unstable, for the netbird packages ONLY. The stable channel ships 0.71.4,
+  # which carries three HIGH advisories including a local privilege escalation
+  # and an SSH-config injection driven by a peer's own hostname — see the
+  # `nixpkgs-netbird` input in flake.nix for the full list, why a lockfile bump
+  # does not help, and how to back this out.
+  #
+  # Only the PACKAGES are swapped; the NixOS module still comes from stable, so
+  # the options below are the 26.05 ones. That pairing is the thing to suspect
+  # first if the daemon ever fails to start after an unstable bump.
+  unstable = inputs.nixpkgs-netbird.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+in
 {
-  services.netbird.enable = true;
+  services.netbird = {
+    enable = true;
+
+    package = unstable.netbird;
+
+    # NO TRAY UI, and it is the package swap above that forced the decision.
+    #
+    # `ui.package` is a separate option that does not follow `package`, so the
+    # first attempt left a 0.71.4 GUI driving a 0.82.0 daemon — eleven minor
+    # versions of IPC drift between two halves of one program, visible only by
+    # reading the closure. Pointing it at unstable too then failed to BUILD:
+    # the 26.05 module wraps the UI by patching its desktop file for
+    # `Name=Netbird`, and 0.82.0 no longer writes that string, so the wrapper
+    # dies with "pattern Name=Netbird doesn't match anything". That is the
+    # stable-module/unstable-package seam, exactly where it was predicted.
+    #
+    # Rather than pin a mismatched pair or patch around the wrapper, drop it.
+    # The module enables this by default merely because a graphical session
+    # exists, but nothing here uses it: no netbird-ui process was running, and
+    # waybar has no netbird module. The CLI and the web dashboard are how this
+    # network is actually driven. Set this back to true (with ui.package on
+    # stable) if a tray icon is ever wanted.
+    ui.enable = false;
+  };
 
   # DNS, AND WHY IT IS HERE RATHER THAN IN A NETWORKING MODULE.
   #

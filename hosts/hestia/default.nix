@@ -22,6 +22,9 @@
   # machine's retention. Forget those by hand once the new groups look right.
   networking.hostName = "hestia";
 
+  # ITS OWN WIREGUARD PORT. Allocation and the reason: ../../modules/nixos/netbird.nix.
+  services.netbird.clients.default.port = 51820;
+
   # No `my.backup.prune` — zagreus prunes. See ../common.
 
   # This host's login password. Still the shared file; see the note in

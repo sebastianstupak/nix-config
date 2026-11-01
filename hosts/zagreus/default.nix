@@ -9,6 +9,10 @@
 
   networking.hostName = "zagreus";
 
+  # ITS OWN WIREGUARD PORT, one above hestia's. Allocation and the reason:
+  # ../../modules/nixos/netbird.nix.
+  services.netbird.clients.default.port = 51821;
+
   # THE ONE MACHINE THAT PRUNES.
   #
   # Pruning takes an exclusive lock on the shared restic repository, so it has

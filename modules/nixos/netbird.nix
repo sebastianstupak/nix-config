@@ -1,4 +1,27 @@
 # NetBird mesh VPN client. Run `netbird up` once to authenticate/join a network.
+#
+# EVERY HOST GETS ITS OWN WIREGUARD PORT, set in hosts/<host>/default.nix:
+#
+#   hestia   51820   (nixpkgs' default)
+#   zagreus  51821
+#
+# and the reason is NAT, not tidiness. The gateway's automatic outbound NAT
+# rewrites source ports, which breaks NetBird's UDP hole punching — every peer
+# behind it fell back to a relay in Frankfurt, so two machines on the same
+# switch talked to each other via Germany. The fix is an outbound NAT rule with
+# static-port, which tells the firewall to leave the source port alone
+# (docs/REMOTE.md, and docs/REMOTE-ACCESS.md in the hades repo).
+#
+# But static-port is exactly what makes a SHARED port a problem. nixpkgs
+# defaults every client to 51820, so with the rule in place two peers on one LAN
+# would both want to appear as <wan-ip>:51820 — one wins and the other falls
+# back to the relay we just escaped. Distinct ports per host is what keeps the
+# fix working for more than one machine at a time.
+#
+# Adding a machine: give it the next port, and widen the firewall rule's source
+# port range to match. Measured, not assumed — `netbird status --detail` reports
+# `Connection type: P2P` with real ICE candidates when this is right, and
+# `Relayed` with `-/-` when it is not.
 { ... }:
 {
   services.netbird.enable = true;

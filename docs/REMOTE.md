@@ -361,6 +361,67 @@ its config in place without dropping sessions. If `busctl` disagrees with
 That is exactly the failure hibernation exists to fix (`docs/POWER.md`), and
 turning this on gives it up. Leave it off on a machine you only carry.
 
+## Adding a machine
+
+The bare-metal install is `docs/INSTALL.md`. This is only the remote-access
+wiring, and it assumes the machine already boots this config.
+
+Most of it is automatic now. **NetBird enrolment needs nothing**: the setup key
+is in sops, `services.netbird.clients.default.login.setupKeyFile` hands it to
+the daemon, the key auto-joins `my-devices`, and the policies apply the moment
+it does. A reinstalled machine rejoins on first boot with nobody at the
+keyboard. What follows is the part that still needs a decision or a key.
+
+**Before the first boot** — from the password manager you need
+`netbird/setup-key` only if the machine is being installed from scratch and
+cannot yet decrypt sops (its host key is not a recipient until you enrol it,
+which is `docs/INSTALL.md` step 6 and the lockout it warns about).
+
+**1. Give it a WireGuard port.** In `hosts/<name>/default.nix`:
+
+```nix
+services.netbird.clients.default.port = 51822;   # next free; see modules/nixos/netbird.nix
+```
+
+Not cosmetic — two peers sharing a port collide under the gateway's
+static-port NAT rule and one falls back to a relay. The allocation table lives
+in `modules/nixos/netbird.nix`.
+
+**2. Add a matching outbound NAT rule** on the gateway (Firewall → NAT →
+Outbound): duplicate an existing NetBird rule and change its source port.
+
+> Worth doing once, at machine #3: replace the per-machine rules with a single
+> rule pointing at a **port alias** (Firewall → Aliases → type `Port`, content
+> `51820-51829`). The source-port field rejects a literal range but accepts an
+> alias, so after that a new machine needs no firewall change at all — just the
+> next port in `hosts/<name>/`.
+
+**3. Trust it, and let it trust you.** In `hosts/common/default.nix`:
+
+```bash
+# ON the new machine
+cat /etc/ssh/ssh_host_ed25519_key.pub   # -> my.remote.peers.<name>.publicKey
+cat ~/.ssh/id_ed25519.pub               # -> my.remote.authorizedKeys
+netbird status                          # -> its FQDN, for peers.<name>.hostNames
+```
+
+Agent forwarding is off, so each machine needs its own key rather than
+borrowing one over the wire. List them all in `allowed_signers` so commits stay
+verifiable.
+
+**4. Pair desktops, selectively.** Sunshine pairing is per direction and cannot
+be declared — see "Pairing" above, and wait a minute after any Sunshine restart
+or the pair request times out. Pair only the pairs you actually want: a paired
+client can inject input, which is a bigger grant than SSH.
+
+**5. Record its secrets.** `<host>/login-password`, `<host>/sunshine-web-ui`,
+`<host>/ssh-key-passphrase` — the per-host items in `secrets/README.md`. None
+of them can be recovered from the repo.
+
+Nothing else is per-machine. The firewall scoping, SSH hardening, Sunshine,
+wayvnc, the no-suspend policy and the NetBird group membership all come from
+`hosts/common` and apply the moment the machine boots this config.
+
 ## Things that went wrong, or nearly did
 
 - **The overlay is not implicitly trusted by the firewall.** With

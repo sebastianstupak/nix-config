@@ -172,6 +172,13 @@ git add hosts/zagreus/hardware-configuration.nix   # REQUIRED: flakes ignore unt
 machine's SSH host key. A fresh install has a host key that is not yet a
 recipient.
 
+> **You need the password manager here, not the repo.** Re-keying requires an
+> identity that can already decrypt, and a brand-new machine has none — that is
+> the whole chicken-and-egg. `nixcfg/age-key` from Proton Pass is what breaks
+> it; `secrets/README.md` → "What to keep OUTSIDE these machines" lists every
+> item and how it was captured. If that key is missing, these files cannot be
+> re-keyed from this machine at all.
+
 Generate the host key into the target now, so it exists before activation:
 
 ```bash
@@ -307,6 +314,19 @@ direnv allow          # nix-direnv loads the dev shell and sets core.hooksPath
 sudo nixos-rebuild switch --flake ~/nix-config#<host>
 # rollback a bad change:
 sudo nixos-rebuild switch --rollback
+```
+
+**Remote access** needs five things this guide does not cover — a WireGuard
+port, a matching NAT rule on the gateway, the machine's host and user keys,
+desktop pairing, and its per-host secrets recorded off-machine. They are a
+checklist in `docs/REMOTE.md` ("Adding a machine").
+
+NetBird itself needs nothing: the setup key is in sops and the daemon enrols
+on first boot, lands in the `my-devices` group, and inherits the access
+policies automatically. Confirm with:
+
+```bash
+netbird status          # Management/Signal Connected, and the new FQDN
 ```
 
 **Your commit-signing key.** Every commit this config makes is signed with

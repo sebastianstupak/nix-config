@@ -2,7 +2,7 @@
 
 Temporary. **Delete this file once the last box is ticked** — the durable
 versions live in `docs/REMOTE.md`, `secrets/README.md` and the hades repo's
-`docs/REMOTE-ACCESS.md`.
+`docs/remote-access/`.
 
 zagreus has been offline since ~2026-10-05 and has missed everything below.
 Most of it is one rebuild; the rest is collecting two keys and one password.
@@ -57,16 +57,34 @@ This delivers, all already verified building for this host:
 
 - [ ] switched without errors
 
-## 3. NetBird — expect one last interactive login
+## 3. NetBird — convert it to key enrolment
 
-That peer was *already expired* when login-expiration was disabled for it, so
-it will probably need one final browser round-trip to clear the state. After
-this it should never ask again.
+zagreus's peer is still SSO-enrolled and already sitting *expired*, so rather
+than one more browser round-trip, delete it and let it come back on the setup
+key. This was done on hestia on 2026-11-01 and works cleanly.
 
 ```bash
-netbird status          # if it says NeedsLogin:
-netbird up
+netbird down
+# delete the `zagreus` peer in the NetBird dashboard (Peers -> ... -> Delete)
+netbird up        # the daemon finds the setup key itself via setupKeyFile
 ```
+
+Two things change, neither harmful here:
+
+- **A new overlay IP.** The FQDN `zagreus.netbird.cloud` survives, because it
+  follows the peer name, which comes from the hostname. Only `100.94.242.62`
+  in `hosts/common/default.nix` needs updating afterwards.
+- **Group membership resets** to whatever the key auto-assigns — `my-devices`.
+  That is already a distribution group for the `datadir dev` nameserver, so
+  DNS will work. Confirm anyway, because when this bit hestia it looked
+  exactly like a DNS outage:
+
+```bash
+netbird status | grep -i nameserver     # want 1/1 Available, not 0/0
+```
+
+If you would rather not, plain `netbird up` also works — it stays SSO but no
+longer expires.
 
 Then verify:
 

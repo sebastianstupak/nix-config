@@ -10,7 +10,7 @@
 # behind it fell back to a relay in Frankfurt, so two machines on the same
 # switch talked to each other via Germany. The fix is an outbound NAT rule with
 # static-port, which tells the firewall to leave the source port alone
-# (docs/REMOTE.md, and docs/REMOTE-ACCESS.md in the hades repo).
+# (docs/REMOTE.md, and docs/remote-access/ in the hades repo).
 #
 # But static-port is exactly what makes a SHARED port a problem. nixpkgs
 # defaults every client to 51820, so with the rule in place two peers on one LAN

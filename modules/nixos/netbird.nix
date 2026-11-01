@@ -18,10 +18,16 @@
 # back to the relay we just escaped. Distinct ports per host is what keeps the
 # fix working for more than one machine at a time.
 #
-# Adding a machine: give it the next port, and widen the firewall rule's source
-# port range to match. Measured, not assumed — `netbird status --detail` reports
-# `Connection type: P2P` with real ICE candidates when this is right, and
-# `Relayed` with `-/-` when it is not.
+# Adding a machine: give it the next port, and add a MATCHING OUTBOUND NAT RULE
+# on the gateway — one rule per port, not one rule with a range. That field
+# rejects `51820-51829` with "You must supply either a valid port or port
+# alias", so the options are a rule each or a port alias to reference; at two
+# machines a rule each is the smaller thing. Duplicating the existing rule and
+# changing its source port is the whole job.
+#
+# Measured, not assumed — `netbird status --detail` reports `Connection type:
+# P2P` with real ICE candidates when this is right, and `Relayed` with `-/-`
+# when it is not.
 { ... }:
 {
   services.netbird.enable = true;

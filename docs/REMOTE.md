@@ -267,6 +267,54 @@ vncviewer 100.94.98.165:5900          # TigerVNC; asks for your login password
 
 ## Desktop (Sunshine)
 
+### First run on a new machine
+
+Sunshine arrives configured by Nix but **unprovisioned** — it has no admin
+credentials until someone visits it once. Four steps, in this order, because
+two of them have timing traps.
+
+**1. Start it.** Sunshine and wayvnc are both
+`wantedBy=graphical-session.target`, and systemd does not retroactively pull a
+newly-added unit into an already-running target — so straight after the switch
+that first enables them, they are inactive. Log out and back in, or:
+
+```bash
+systemctl --user start sunshine wayvnc
+systemctl --user is-active sunshine wayvnc     # both: active
+```
+
+**2. Wait for the encoder probe.** It takes about 54 seconds and nothing works
+until it finishes:
+
+```bash
+journalctl --user -u sunshine -f | grep -m1 "Configuration UI available"
+```
+
+**3. Set admin credentials** at <https://localhost:47990> — accept the
+self-signed certificate, then fill in the welcome screen. Localhost only by
+design, so the same URL over the overlay returns **403**; that is the setting
+working, not a fault.
+
+The password is only for this admin UI. It is regenerable: delete
+`~/.config/sunshine/sunshine_state.json` and revisit the page.
+
+**4. Confirm hardware encoding.** Sunshine falls back to a software encoder
+silently, so check rather than assume:
+
+```bash
+vainfo | grep -c VAEntrypointEncSlice     # want non-zero
+journalctl --user -u sunshine | grep -E "va_openDriver|Selected monitor"
+#   want:  va_openDriver() returns 0      and  Selected monitor [...]
+```
+
+On Intel this needs `intel-media-driver` — `hardware.graphics.enable` does not
+provide it, and its absence is exactly how a silent software fallback happens
+(see "Things that went wrong"). AMD gets VA-API from Mesa and needs nothing.
+
+The `CUDA` / `nvenc` errors are expected on both machines — no Nvidia GPU.
+Sunshine says so itself: *"Ignore any errors mentioned above, they are not
+relevant."*
+
 ### Pairing (once per client)
 
 The web UI is restricted to `origin_web_ui_allowed = "pc"`, so it is not exposed

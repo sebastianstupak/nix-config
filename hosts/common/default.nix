@@ -87,7 +87,7 @@
       hestia = {
         hostNames = [
           "hestia.netbird.cloud"
-          "100.94.98.165"
+          "100.94.198.156"
         ];
         publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAyCoT427eImjRO7gZhcsx4ylFzunEbDOLlcPXxC9gv workstation-intel";
       };

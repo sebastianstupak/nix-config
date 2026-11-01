@@ -40,6 +40,32 @@ IP, giving the memorable `workstation-98-165.netbird.cloud`. Renamed in the
 dashboard to `hestia` / `zagreus`; the FQDN follows immediately. Rename there,
 not in this repo.
 
+### Re-enrolling a peer drops it from its groups — and DNS rides on groups
+
+Deleting a peer and letting it re-enrol gives it a **new overlay IP** and only
+the groups its setup key auto-assigns. The FQDN survives, because that follows
+the peer *name*, which comes from the hostname.
+
+The part that bites: **NetBird distributes DNS nameservers by group, not to
+everyone.** The `datadir dev` nameserver — the one that resolves
+`git.datadir.dev` and friends — is distributed to `dev` and `ops`. A
+re-enrolled peer landing only in `my-devices` therefore came up with
+`Nameservers: 0/0 Available` and could not resolve a single `datadir.dev`
+name, while SSH by overlay address kept working perfectly. It reads like a
+DNS outage rather than a group-membership change.
+
+Fixed by adding `my-devices` to that nameserver's distribution groups. Check
+after any re-enrolment:
+
+```bash
+netbird status | grep -i nameserver     # want 1/1 Available, not 0/0
+resolvectl query git.datadir.dev        # want an answer on link wt0
+```
+
+Worth knowing too: `dev` and `ops` look vestigial because no *policy*
+references them — but they are what the DNS distribution keys on. Do not
+delete them on the strength of the policy list alone.
+
 ### Why you kept having to run `netbird up`
 
 Because the personal machines were enrolled **interactively via SSO**, and the
@@ -262,7 +288,7 @@ So use TigerVNC when connecting *to* a Nix box if you want the accelerated path.
 ```bash
 # Sunshine (NixOS/Windows targets) — Moonlight, host = overlay IP
 # VNC (any target)
-vncviewer 100.94.98.165:5900          # TigerVNC; asks for your login password
+vncviewer hestia.netbird.cloud:5900          # TigerVNC; asks for your login password
 ```
 
 ## Desktop (Sunshine)
@@ -326,7 +352,7 @@ ssh -L 47990:localhost:47990 sebastianstupak@<host>
 
 Then open <https://localhost:47990> on the client, accept the self-signed
 certificate, and set a username and password on first visit. In Moonlight, add
-the host by its **overlay IP** (`100.94.98.165`, not the LAN address), and enter
+the host by its **overlay name** (`hestia.netbird.cloud`, not the LAN address), and enter
 the PIN Moonlight shows into the web UI's PIN page.
 
 Pairing state lives in `~/.config/sunshine/`, not in the Nix-generated config,

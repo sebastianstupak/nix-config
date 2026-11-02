@@ -65,6 +65,11 @@
     # Protocol matrix and per-OS setup: docs/REMOTE.md.
     vnc.enable = true;
 
+    # Both machines are desktops that connect to each other, not just targets.
+    # Without this neither could open the other's screen — see the option's
+    # description in modules/nixos/remote.nix.
+    clients.enable = true;
+
     # Client keys. One line per machine you connect FROM — add the Windows and
     # macOS ones here as they appear, rather than appending to
     # ~/.ssh/authorized_keys on each host and losing it at the next reinstall.

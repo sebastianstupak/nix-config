@@ -258,6 +258,28 @@ in
 
       See docs/REMOTE.md for the protocol matrix and the per-OS host setup.
     '';
+
+    clients.enable = lib.mkEnableOption ''
+      the CLIENT half — Moonlight and a VNC viewer — so these machines can
+      connect TO each other and not merely be connected to.
+
+      Everything else in this module is a server. That was enough while the
+      only client was apollo (Windows), and it quietly meant NEITHER laptop
+      could reach the other's desktop: both ran Sunshine, neither had
+      Moonlight, so hestia <-> zagreus streaming had no client to do it with
+      even though the firewall, the overlay and the pairing flow were all
+      ready. Discovered 2026-11-03 by looking for a binary that was never
+      there.
+
+      Opt-in rather than implied by `enable`, for the same reason the module
+      exists at all: a future headless host should serve its desktop without
+      dragging two Qt GUIs into its closure.
+
+      TigerVNC specifically, not any viewer. It is one of only two clients
+      that negotiate wayvnc's OpenH264 extension, which is what makes the
+      hardware-encoded path reachable; the rest fall back to Tight and encode
+      in software. docs/REMOTE.md has the matrix.
+    '';
   };
 
   config = lib.mkIf cfg.enable {
@@ -495,12 +517,22 @@ in
     # auth" is not a position this can take.
     security.pam.services.wayvnc = lib.mkIf cfg.vnc.enable { };
 
-    # For `wayvncctl`, not for wayvnc itself — the service runs the binary from
-    # the store by absolute path. wayvncctl is how the running server is
-    # inspected and steered (`output-list`, `output-set`, `attach`), which is
-    # exactly what you need when the stream shows the wrong screen, so having
-    # it only inside the unit's closure is useless.
-    environment.systemPackages = lib.mkIf cfg.vnc.enable [ pkgs.wayvnc ];
+    # ONE definition, two independent options — `environment.systemPackages`
+    # can only be assigned once in this attrset, the same constraint called out
+    # for the firewall interface above. Concatenate; do not add a second
+    # `environment.systemPackages =` line.
+    #
+    # wayvnc here is for `wayvncctl`, not for wayvnc itself — the service runs
+    # the binary from the store by absolute path. wayvncctl is how the running
+    # server is inspected and steered (`output-list`, `output-set`, `attach`),
+    # which is exactly what you need when the stream shows the wrong screen, so
+    # having it only inside the unit's closure is useless.
+    environment.systemPackages =
+      lib.optional cfg.vnc.enable pkgs.wayvnc
+      ++ lib.optionals cfg.clients.enable [
+        pkgs.moonlight-qt
+        pkgs.tigervnc
+      ];
 
     systemd.user.services.wayvnc = lib.mkIf cfg.vnc.enable {
       description = "wayvnc — VNC server for the running Hyprland session";

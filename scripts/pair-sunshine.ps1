@@ -44,6 +44,7 @@ param(
   [string]$Name = $env:COMPUTERNAME,
   [string]$User = 'sebastianstupak',
   [string]$SecretFile,
+  [string]$SshHost,
   [switch]$SetPassword
 )
 
@@ -57,6 +58,10 @@ function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 # by this Windows user on this machine. The password is never typed on a command
 # line (prompted hidden) and never written in plaintext.
 if (-not $SecretFile) { $SecretFile = Join-Path $HOME ".config\sunshine-pair\$HostFqdn.pass" }
+# SSH target for the tunnel: default to the short alias (first label), e.g.
+# 'hestia', which must carry the right User + IdentityFile in ~/.ssh/config.
+# The FQDN is used for Moonlight (direct overlay stream); SSH uses the alias.
+if (-not $SshHost) { $SshHost = ($HostFqdn -split '\.')[0] }
 
 # --- -SetPassword: prompt (hidden), encrypt, store, exit ----------------------
 if ($SetPassword) {
@@ -95,7 +100,7 @@ catch {
 Write-Host "Opening SSH tunnel to $HostFqdn (localhost:$LocalPort -> :47990)..." -ForegroundColor Cyan
 $tunnel = Start-Process ssh -ArgumentList @(
   '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes',
-  '-N', '-L', "${LocalPort}:localhost:47990", $HostFqdn
+  '-N', '-L', "${LocalPort}:localhost:47990", $SshHost
 ) -PassThru -WindowStyle Hidden
 try {
   # wait for the forwarded port to accept connections
@@ -103,27 +108,19 @@ try {
   for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 700
     if ((Test-NetConnection -ComputerName localhost -Port $LocalPort -WarningAction SilentlyContinue).TcpTestSucceeded) { $up = $true; break }
-    if ($tunnel.HasExited) { Fail "SSH tunnel died (exit $($tunnel.ExitCode)). Is '$HostFqdn' reachable? Try: ssh $HostFqdn echo ok" }
+    if ($tunnel.HasExited) { Fail "SSH tunnel died (exit $($tunnel.ExitCode)). Is '$SshHost' SSH-reachable with the right key/user? Try: ssh $SshHost echo ok  (override with -SshHost <alias>)" }
   }
   if (-not $up) { Fail "Tunnel did not come up on localhost:$LocalPort" }
 
-  # confirm Sunshine answers (401 = reachable + auth required, which is correct)
-  $probe = curl.exe -k -s -o $null -w "%{http_code}" --max-time 15 "https://localhost:$LocalPort/" 2>&1
-  if ($probe -notin @('401', '200', '302')) { Fail "Sunshine web UI not responding through the tunnel (got '$probe')." }
+  # confirm Sunshine answers (401 = reachable + auth required, which is correct).
+  # Match on the body/code containing 200/302/401 -- robust whether curl emits
+  # the status code or the JSON body.
+  $probe = (curl.exe -k -s -o NUL -w "%{http_code}" --max-time 15 "https://localhost:$LocalPort/" 2>&1 | Out-String).Trim()
+  if ($probe -notmatch '200|302|401') { Fail "Sunshine web UI not responding through the tunnel (got '$probe')." }
 
-  # --- pick a PIN and kick off the client-side pairing -----------------------
-  $pin = '{0:D4}' -f (Get-Random -Minimum 0 -Maximum 10000)
-  Write-Host "Pairing with PIN $pin ..." -ForegroundColor Cyan
-  $pairProc = Start-Process $moon -ArgumentList @('pair', $HostFqdn, '--pin', $pin) -PassThru -WindowStyle Hidden
-
-  Start-Sleep -Seconds 4   # let Moonlight register the pending pair session on the host
-
-  # --- accept the PIN on the host via Sunshine's API --------------------------
-  # Basic auth; we deliberately send NO Origin/Referer header, so Sunshine's
-  # CSRF check treats us as a non-browser client and skips the token. We must
-  # pass the pending session's pairing_id, which Moonlight created above and we
-  # read from GET /api/pin (it lists pending pairings with their id/name/address).
-  # decrypt to plaintext only transiently in memory, to build the Basic header
+  # --- build the Basic auth header (decrypt transiently in memory) -----------
+  # No Origin/Referer header is sent, so Sunshine's CSRF check treats us as a
+  # non-browser client and skips the token.
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
   try {
     $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
@@ -133,22 +130,45 @@ try {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr); $plain = $null
   }
 
-  $pairingId = $null; $pending = ''
-  for ($i = 0; $i -lt 12; $i++) {
-    $pending = (curl.exe -k -s --max-time 15 -H "Authorization: Basic $b64" "https://localhost:$LocalPort/api/pin" 2>&1 | Out-String).Trim()
-    if ($pending -match 'Unauthorized') {
-      Fail "Sunshine rejected the admin password in $SecretFile. Set it on the host (sunshine --creds $User '<pass>') and put the SAME value in that file."
-    }
-    try { $pairingId = ((($pending | ConvertFrom-Json).pairings) | Select-Object -First 1).id } catch { $pairingId = $null }
-    if ($pairingId) { break }
-    Start-Sleep -Seconds 2
-  }
-  if (-not $pairingId) { Fail "No pending pairing appeared (Moonlight may not have initiated). Last GET /api/pin: $pending" }
+  function Get-Pending { (curl.exe -k -s --max-time 15 -H "Authorization: Basic $b64" "https://localhost:$LocalPort/api/pin" 2>&1 | Out-String).Trim() }
 
+  # Snapshot pending pairings BEFORE we start, so we target OUR new session and
+  # never submit our PIN against a stale pending pairing left by a prior run.
+  $before = Get-Pending
+  if ($before -match 'Unauthorized') {
+    Fail "Sunshine rejected the admin password. Reset it:  .\pair-sunshine.ps1 $HostFqdn -SetPassword   (on the host: sunshine --creds $User '<pass>')"
+  }
+  $beforeIds = @(); try { $beforeIds = (($before | ConvertFrom-Json).pairings).id } catch { }
+
+  # --- kick off the client-side pairing --------------------------------------
+  $pin = '{0:D4}' -f (Get-Random -Minimum 0 -Maximum 10000)
+  Write-Host "Pairing with PIN $pin ..." -ForegroundColor Cyan
+  $pairProc = Start-Process $moon -ArgumentList @('pair', $HostFqdn, '--pin', $pin) -PassThru -WindowStyle Hidden
+
+  # --- find OUR new pending session (the id that was not there before) -------
+  $pairingId = $null; $pending = ''
+  for ($i = 0; $i -lt 15; $i++) {
+    Start-Sleep -Seconds 2
+    $pending = Get-Pending
+    try {
+      $new = (($pending | ConvertFrom-Json).pairings) | Where-Object { $_.id -notin $beforeIds } | Select-Object -First 1
+      if ($new) { $pairingId = $new.id; break }
+    } catch { }
+  }
+  if (-not $pairingId) { Fail "No new pending pairing appeared (Moonlight may not have initiated). Last GET /api/pin: $pending" }
+
+  # Write the JSON body to a temp file and POST it with --data-binary @file.
+  # Passing JSON inline to curl.exe from PowerShell strips the double quotes
+  # (Sunshine then sees {pairing_id:...} and 400s on the missing string key).
   $body = (@{ pairing_id = $pairingId; pin = $pin; name = $Name } | ConvertTo-Json -Compress)
-  $resp = (curl.exe -k -s --max-time 30 `
-      -H "Authorization: Basic $b64" -H "Content-Type: application/json" `
-      -X POST -d $body "https://localhost:$LocalPort/api/pin" 2>&1 | Out-String).Trim()
+  $bodyFile = Join-Path $env:TEMP ("sunshine-pin-$PID.json")
+  Set-Content -Path $bodyFile -Value $body -Encoding ASCII -NoNewline
+  try {
+    $resp = (curl.exe -k -s --max-time 30 `
+        -H "Authorization: Basic $b64" -H "Content-Type: application/json" `
+        -X POST --data-binary "@$bodyFile" "https://localhost:$LocalPort/api/pin" 2>&1 | Out-String).Trim()
+  }
+  finally { Remove-Item $bodyFile -Force -ErrorAction SilentlyContinue }
   Write-Host "Sunshine /api/pin response: $resp"
   if ($resp -match '"status"\s*:\s*true') {
     Write-Host "PIN accepted - handshake completing..." -ForegroundColor Green

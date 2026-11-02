@@ -762,10 +762,30 @@ in
           deactivated = "󰒲"; # zzz
         };
         # Each tooltip says what is true NOW on the first line, then what the
-        # click will do. Timings come from services.hypridle in hyprland.nix —
-        # keep them in step if those change.
-        tooltip-format-deactivated = "󰒲 Screen WILL sleep\nLocks after 5 min idle, suspends after 10.\n\nClick to keep it awake.";
-        tooltip-format-activated = "󰅶 Screen is being kept AWAKE\nNo lock, no suspend, however long you idle.\n\nClick to let it sleep again.";
+        # click will do.
+        #
+        # DERIVED FROM my.power.remoteAccess, not written out by hand, because
+        # the hand-written version went stale and actively misled: it promised
+        # "suspends after 10" on a machine where remoteAccess had removed the
+        # sleep listener entirely (modules/home/hyprland.nix — "The LOCK
+        # listener is unconditional; the SLEEP one is not"). The only thing that
+        # happens at five minutes is a lock. Someone read this tooltip, believed
+        # the machine was sleeping behind their back, and reasonably concluded
+        # that was why a remote session might drop.
+        #
+        # A tooltip is UI for a decision, so a false one is worse than none.
+        # Conditioning it on the same option that drives hypridle is what keeps
+        # the promise the old comment here only asked for.
+        tooltip-format-deactivated =
+          if osConfig.my.power.remoteAccess then
+            "󰒲 Screen will LOCK\nLocks after 5 min idle. Does NOT sleep or suspend —\nSSH and Sunshine keep working behind the lock screen.\n\nClick to stop it locking."
+          else
+            "󰒲 Screen WILL sleep\nLocks after 5 min idle, suspends after 10.\n\nClick to keep it awake.";
+        tooltip-format-activated =
+          if osConfig.my.power.remoteAccess then
+            "󰅶 Screen is being kept UNLOCKED\nNo lock, however long you idle.\n\nClick to let it lock again."
+          else
+            "󰅶 Screen is being kept AWAKE\nNo lock, no suspend, however long you idle.\n\nClick to let it sleep again.";
       };
 
       # us <-> sk indicator for the Alt+Shift toggle. `{short}` renders the

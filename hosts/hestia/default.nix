@@ -10,8 +10,9 @@
 {
   imports = [ ../common ];
 
-  # THE DISCRETE GPU IS DEAD WEIGHT, AND NOUVEAU LOADS ANYWAY — read on, because
-  # the obvious move is the wrong one and this file used to make it.
+  # THE DISCRETE GPU IS DEAD WEIGHT, so its driver does not load — and the power
+  # is handled somewhere else entirely. Read on: the obvious diagnosis here was
+  # wrong twice, and the measurement that settled it is below.
   #
   # This machine has an NVIDIA RTX A500 at 01:00.0 alongside the Raptor Lake
   # iGPU — which ../../docs/REMOTE.md spent a while denying, on the strength of
@@ -21,28 +22,43 @@
   # ... not a KMS device" every session. Hyprland renders on /dev/dri/card1
   # (i915) and VA-API encodes on renderD128 (iHD) regardless.
   #
-  # So it was blacklisted, to stop Sunshine probing an nvenc/CUDA encoder on
+  # So it is blacklisted, which stops Sunshine probing an nvenc/CUDA encoder on
   # every stream and failing it ("Failed to create a CUDA device" — nouveau
-  # offers no CUDA and never will). THAT MADE THE POWER WORSE, or at best
-  # changed nothing: on an Optimus laptop the chip is put into D3cold by the
-  # DRIVER's runtime PM, so with nothing bound there is nothing left to invoke
-  # the ACPI power-off and it can sit in D0 indefinitely. The documented remedy
-  # for "power is still high after disabling the dGPU" is to remove the
-  # blacklist and let nouveau load.
+  # offers no CUDA and never will), and removes /dev/dri/card0 and renderD129
+  # so the probe has nothing to find.
   #
-  # The giveaway was that power/control read "on" both before and after the
-  # blacklist, because TLP pins runtime PM on AC (see RUNTIME_PM_ON_AC in
-  # ../../modules/nixos/laptop.nix, now "auto"). Nothing was ever suspending
-  # this GPU; the blacklist only silenced a log line.
+  # THIS WAS BRIEFLY REVERTED, on the widely-repeated argument that an Optimus
+  # dGPU only reaches D3cold through its DRIVER's runtime PM — so a blacklisted
+  # card supposedly sits in D0 forever, and the documented remedy for "power is
+  # still high after disabling the dGPU" is to let nouveau load. MEASURED ON
+  # THIS MACHINE, THAT IS FALSE. With no driver bound at all, and TLP no longer
+  # pinning power/control, the device runtime-suspends by itself:
   #
-  # So: no blacklist, and the driver is left to do its job. The CUDA probe
-  # noise comes back and is simply accepted — about 0.4s per Sunshine start,
-  # which Sunshine itself prints "Ignore any errors mentioned above" about.
+  #   driver bound:           none
+  #   power/control:          auto
+  #   runtime_status:         suspended
+  #   runtime_active_time:    14828646 ms  (4.1h, accumulated while pinned "on")
+  #   runtime_suspended_time: 143921 ms    (began the moment it was not)
   #
-  # Verify rather than trust, because this is the whole point of the change:
+  # The PCI core suspends an unbound device perfectly well here. The real cause
+  # was always TLP's RUNTIME_PM_ON_AC default of "on" (see
+  # ../../modules/nixos/laptop.nix): power/control read "on" both before AND
+  # after the blacklist, so nothing was ever suspending this GPU and the
+  # blacklist was never what cost the power.
+  #
+  # Both are therefore kept, because they fix different things and do not
+  # conflict — the blacklist buys quiet logs, TLP's "auto" buys the power.
+  # Letting nouveau load would hand back the CUDA probe noise for no measured
+  # benefit.
+  #
+  # Verify rather than trust:
   #   cat /sys/bus/pci/devices/0000:01:00.0/power/runtime_status   # want: suspended
-  # If it still says "active" on battery, the dGPU is awake and the BIOS
-  # graphics setting is the only guaranteed off.
+  # If that reads "active", suspect a pin on power/control before suspecting the
+  # missing driver. The BIOS graphics setting remains the only guaranteed off.
+  boot.blacklistedKernelModules = [
+    "nouveau"
+    "nvidiafb"
+  ];
 
   # A NAME OF ITS OWN, and the reason is not cosmetic. Both machines answered to
   # `workstation`, and restic's `forget --group-by host` groups snapshots by

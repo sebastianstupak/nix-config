@@ -16,9 +16,13 @@
   # Unset, RUNTIME_PM_ON_AC is "on" — devices held awake permanently on AC. That
   # is the conservative choice and it is usually invisible, but on hestia it was
   # load-bearing in the wrong direction: the discrete RTX A500 read
-  # power/control=on forever, so nothing ever invoked its ACPI power-off, and a
-  # whole round of "disable the dGPU" work changed nothing because the pinning
-  # was the actual cause (see hosts/hestia/default.nix).
+  # power/control=on forever and never suspended, which sent a whole round of
+  # "disable the dGPU" work chasing the driver instead of the pin.
+  #
+  # Flipping this moved 26 PCI devices from "on" to "auto" and the dGPU from
+  # `active` to `suspended` within seconds, WITH NO DRIVER BOUND TO IT — which
+  # is also what disproved the received wisdom that an unbound Optimus card
+  # cannot power down. See hosts/hestia/default.nix for the numbers.
   #
   # "auto" only PERMITS the kernel to suspend an idle device; it does not force
   # anything. The documented risk is hardware that misbehaves when autosuspended

@@ -85,6 +85,70 @@ The durable alternative, if you ever want hands-off enrolment of a new machine,
 is `services.netbird.clients.default.login.setupKeyFile` pointing at a sops
 secret — that is how the servers were done.
 
+### Docking drops peers onto a relay, and they can stay there
+
+Plugging hestia into Ethernet made Moonlight fail, then work again a minute
+later with nothing changed. Worth writing down because every part of it is
+misleading.
+
+**What happens.** The dock's NIC comes up on the *same subnet* as wifi and with
+a lower route metric, so there are two default routes:
+
+```
+default via 192.168.1.1 dev enp0s13f0u1u1u4 src 192.168.1.128 metric 100
+default via 192.168.1.1 dev wlp0s20f3       src 192.168.1.229 metric 600
+```
+
+Already-negotiated ICE paths were built on the old address, so they break.
+NetBird's control plane keeps reporting `Management: Connected`,
+`Signal: Connected` and the overlay IP is unchanged — only the *data* path is
+dead. Peers with active traffic re-gather candidates and recover on their own
+(apollo did, within a minute). **Idle peers do not**: forge sat at
+`Connection type: Relayed` with `ICE candidate endpoints: -/-` for fifteen
+minutes, routing through Frankfurt, and pinging it did not shake it loose.
+
+**The fix, which needs no root:**
+
+```bash
+netbird down && netbird up
+netbird status -d | grep -E "netbird.cloud:|Connection type|Latency"
+```
+
+`netbird status` already works as your user because the daemon's RPC socket is
+user-accessible, so there is no reason to reach for sudo. Measured result:
+forge went `Relayed` → `P2P` at 20 ms, apollo stayed `P2P` at 3.8 ms.
+
+**The unit, if you do want systemctl, is `netbird.service`** — not
+`netbird-default.service`, which does not exist and which both a web search and
+an earlier guess here got wrong. `services.netbird.clients.<key>` has its own
+`name` option defaulting to `"netbird"`, and the unit is derived from
+`client.name`, not from the attribute key (nixpkgs
+`nixos/modules/services/networking/netbird.nix`:
+`default = if client.name != "netbird" then "netbird-${client.name}" else client.name`).
+
+**Things that are NOT the cause**, each of which cost time:
+
+- **The gateway.** All three static-port outbound NAT rules exist on OPNsense,
+  scoped to `LAN net` (not to a single host IP, so a new DHCP address matches
+  fine), `static-port` YES, in Hybrid mode — including zagreus's `51821`.
+  Nothing to change there.
+- **An endpoint that is not `:51820`.** `netbird status -d` showing
+  `86.49.241.18:51648` is an ICE *server-reflexive* candidate from the agent's
+  ephemeral socket, not the WireGuard listen port. `ss -ulnp | grep 51820`
+  confirms WireGuard is where it should be. This is normal and is not evidence
+  the static-port rule failed.
+- **ICE being unable to choose between two local candidates.** forge recovered
+  to `P2P` with both NICs still up, so the dual-interface setup triggers the
+  churn but does not prevent a direct path.
+- **Ping.** apollo shows 100% packet loss over the overlay while streaming
+  happily — it is Windows, and Windows Firewall drops inbound ICMP by default.
+  Never use ping as a health check against the Windows peer.
+
+**To stop it recurring**, don't keep two default routes on one subnet: have
+NetworkManager drop wifi while Ethernet is up, or raise wifi's metric so it is
+unambiguously standby. Not yet implemented — the one-liner above is the current
+answer.
+
 ## The firewall trusts the whole overlay — Netbird's policy is the real control
 
 **Read this before adding peers.** `my.remote` opens port 22 on `wt0`, and that

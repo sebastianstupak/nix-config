@@ -1,8 +1,15 @@
 # zagreus — catch-up checklist
 
 Temporary. **Delete this file once the last box is ticked** — the durable
-versions live in `docs/REMOTE.md`, `secrets/README.md` and the hades repo's
+versions live in `docs/ZAGREUS.md` (the non-declarative half of bringing a host
+online), `docs/REMOTE.md`, `secrets/README.md` and the hades repo's
 `docs/remote-access/`.
+
+> **Updated 2026-11-02** after a session that changed Sunshine's capture
+> backend and found several things this file used to state wrongly. The
+> corrected items are flagged inline; the short version is that `capSysAdmin`
+> is now ON, startup is ~1.6s rather than ~54s, you must REBOOT rather than
+> switch, and the KMS path is unverified on AMD.
 
 zagreus has been offline since ~2026-10-05 and has missed everything below.
 Most of it is one rebuild; the rest is collecting two keys and one password.
@@ -50,12 +57,28 @@ This delivers, all already verified building for this host:
 | netbird | **0.82.0** (was 0.71.4 — the three HIGH advisories) |
 | WireGuard port | **51821** (hestia keeps 51820; the gateway NAT rule is already live) |
 | setup key | `/run/secrets/netbird-setup-key` — ends the daily `netbird up` |
-| sunshine | **2026.914.233613** (patched; `capSysAdmin` stays off) |
+| sunshine | **2026.914.233613**, `capture = "kms"`, **`capSysAdmin` now ON** |
 | wayvnc | enabled, PAM auth, TLS |
-| lid / idle | `ignore` — stays reachable when closed |
+| lid / idle | `ignore` — stays reachable when closed, **backlight blanks** |
+| TLP | `RUNTIME_PM_ON_AC = "auto"` — idle PCIe devices may now suspend |
+| hyprlock | shows the active keyboard layout (`us`/`sk`) |
 | sshd | keys-only, one user, no root, no agent forwarding, `wt0` only |
 
+**REBOOT AFTER THE SWITCH, do not just switch.** `capSysAdmin` is on for KMS
+capture, and after a `nixos-rebuild switch` Sunshine can silently fail to gain
+`CAP_SYS_ADMIN`: the unit stays `active`, `/run/wrappers/bin/sunshine` still
+carries the capability, and yet no encoder works. The only symptom is
+**Moonlight error 503**. `systemctl --user restart sunshine` does *not* clear
+it; a reboot does. See "Open problem" under `capSysAdmin` in `docs/REMOTE.md`.
+
+```bash
+sudo systemctl reboot
+journalctl --user -u sunshine -b | grep -E "effective cap:21|Failed to gain"
+#   want: effective cap:21
+```
+
 - [ ] switched without errors
+- [ ] rebooted, and `effective cap:21` present
 
 ## 3. NetBird — convert it to key enrolment
 
@@ -105,8 +128,20 @@ netbird status --detail | grep -E "Connection type|ICE candidate"
 #   want: P2P with real ICE candidates, NOT "Relayed" with -/-
 ```
 
-If it says `Relayed`, the gateway NAT rule for **51821** is missing or wrong —
-see `docs/REMOTE.md` → "Adding a machine".
+If it says `Relayed`, **the gateway is not the first thing to suspect** — the
+`51821` static-port rule was confirmed present on OPNsense on 2026-11-02 (WAN /
+`LAN net` / `udp 51821` / static-port YES, Hybrid mode). Far more likely is
+stale ICE state, which idle peers can sit on indefinitely. Recovery needs no
+root:
+
+```bash
+netbird down && netbird up
+netbird status -d | grep -E "netbird.cloud:|Connection type|Latency"
+```
+
+Note the unit is **`netbird.service`**, not `netbird-default.service` — see
+"Docking drops peers onto a relay" in `docs/REMOTE.md` for why, and for the
+other three things that look like causes and are not.
 
 - [ ] 0.82.0, connected, port 51821, **P2P**
 
@@ -139,14 +174,18 @@ systemctl --user start sunshine wayvnc
 systemctl --user is-active sunshine wayvnc     # both: active
 ```
 
-**b. Wait about a minute.** Sunshine probes every encoder at startup (~54s).
-Do not try to pair during this window — Moonlight's pair request times out
-after ~56s and will fail with no useful error, while the web UI cheerfully
-answers the PIN with `{"status":true}` because it runs on a different thread.
+**b. Wait for it to be ready — now ~1.6s, not ~54s.** The old warning here
+said to wait a minute because the encoder probe raced Moonlight's ~56s pair
+timeout. That was the `wlr` capture backend, where each VA-API probe
+round-tripped a screencopy frame. Under `kms` the whole probe is about 1.6
+seconds and the race is gone. Still wait for the line rather than a clock:
 
 ```bash
 journalctl --user -u sunshine -f | grep -m1 "Configuration UI available"
 ```
+
+If startup takes a minute again, something put the capture backend back to
+`wlr`.
 
 **c. Set admin credentials.** Open <https://localhost:47990>, accept the
 self-signed certificate, and set a username and password at the welcome
@@ -182,7 +221,39 @@ ssh -L 47990:localhost:47990 sebastianstupak@zagreus.netbird.cloud
 Pair only the machines you actually want driving this desktop — a paired
 client can inject input, which is a bigger grant than SSH.
 
+**f. Verify the KMS capture path, which is UNTESTED ON AMD.** Everything about
+the switch from `wlr` to `kms` was validated on hestia's Intel iGPU. Expect it
+to work here — AMD gets VA-API from Mesa's `radeonsi`, and the black-frame
+reports against `wlr` are an Nvidia framebuffer-tiling problem — but treat the
+first stream as a test:
+
+```bash
+journalctl --user -u sunshine -b -o cat | grep -E \
+  "Start of KMS monitor list|Monitor 0 is|Found monitor for DRM|Found H.264|Found HEVC"
+```
+
+Two specifics that may differ from hestia:
+
+- **`output_name` is hardcoded to `eDP-1`** (`my.remote.output`). Check what
+  `Monitor 0 is …` actually reports. With one display Sunshine has nothing to
+  choose between so it works regardless, but the setting would be a lie —
+  report it and it becomes per-host.
+- **The lid bind calls `brightnessctl` without naming a device.** On hestia
+  that resolves to `intel_backlight`; here it will be `amdgpu_bl*`. Confirm:
+  close the lid, then `cat /sys/class/backlight/*/brightness` (want `0`),
+  reopen to restore. If it never fires, suspect the `switch:on:Lid Switch`
+  polarity.
+
+Then one real **lid-closed** stream — confirmed working on hestia, so it should
+work here:
+
+```bash
+journalctl --user -u sunshine -b | grep -c "drm fb for plane"   # want 0
+```
+
 - [ ] sunshine active, credentials set, hardware encode confirmed
+- [ ] KMS monitor list shows the right display; `drm fb for plane` is 0
+- [ ] lid closed: backlight 0, stream still good
 - [ ] at least one client paired
 
 ## 6. VNC — nothing to configure
@@ -219,6 +290,31 @@ The login password is shared with hestia today. It becomes per-host only if
 you follow "Splitting a host's password" in `secrets/README.md`.
 
 - [ ] nothing left unrecorded
+
+## 9. One decision to make rather than inherit
+
+`my.power.remoteAccess = true` lives in `hosts/common`, so **zagreus never
+suspends on a closed lid either.** Right for a machine worked *into* from
+elsewhere; questionable for the laptop that actually gets carried, because it
+will flatten itself in a bag. `my.power.lidBacklightOff` reclaims the panel's
+share of that, not the machine being awake.
+
+There is **no remote wake** to fall back on — Wake-on-LAN is Layer 2 and the
+overlay is Layer 3, and while apollo is on the LAN and could relay a magic
+packet, neither laptop has usable onboard Ethernet. So the choice really is
+"awake and reachable" or "asleep and unreachable until touched".
+
+Unless zagreus has an encrypted root, which hestia does not:
+
+```bash
+lsblk -o NAME,FSTYPE,MOUNTPOINT
+```
+
+If root is LUKS, `my.power.hibernate.enable` passes its assertion and
+`suspend-then-hibernate` becomes available — an actual answer rather than a
+trade-off. Report what it says and `remoteAccess` becomes per-host.
+
+- [ ] reported whether root is encrypted; remoteAccess decided deliberately
 
 ---
 

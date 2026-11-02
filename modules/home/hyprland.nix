@@ -180,6 +180,24 @@
         ", XF86MonBrightnessUp, exec, brightnessctl set 5%+"
         ", XF86MonBrightnessDown, exec, brightnessctl set 5%-"
       ];
+
+      # Lid: blank the LAMP, leave the OUTPUT alone.
+      #
+      # `bindl` so it fires with the session locked, which is the state a
+      # closed lid is normally in. Hyprland reports this switch as "Lid Switch"
+      # (`hyprctl devices`); `switch:on` is closed.
+      #
+      # Why not dpms off, which is what every guide reaches for: KMS capture
+      # (modules/nixos/remote.nix) reads the scanout buffer, and dpms off stops
+      # scanout — it would trade a lit panel for a dead stream. Zero brightness
+      # keeps the framebuffer and only kills the backlight.
+      #
+      # `-s`/`-r` are brightnessctl's own save and restore, so reopening gives
+      # back the brightness you had rather than a hardcoded level.
+      bindl = lib.optionals osConfig.my.power.lidBacklightOff [
+        ", switch:on:Lid Switch, exec, brightnessctl -s set 0"
+        ", switch:off:Lid Switch, exec, brightnessctl -r"
+      ];
     };
   };
 

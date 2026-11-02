@@ -71,15 +71,56 @@ in
         machine still locks itself, it just stays awake behind the lock screen,
         and `loginctl unlock-session` over SSH gets you back in.
 
-        The lid matters twice over, and the second reason is easy to miss:
-        closing it also switches the physical output off, and Hyprland will not
-        create clients with no monitor at all. So a closed lid breaks desktop
-        streaming even on a machine that never suspends — see
-        {option}`my.remote.headlessOutput` for the other half of that fix.
+        SUSPENDING IS THE ONLY THING THE LID BREAKS — it does not turn the
+        panel off. That was claimed here for a long time and it is wrong:
+        measured on hestia 2026-11-02 over a 32-second lid close, sampled every
+        second, eDP-1 stayed `connected`/`enabled`/`dpms=On` and Hyprland kept
+        one monitor at `dpmsStatus: 1`, identical to lid-open. Nothing watches
+        the lid once this option sets logind to `ignore`, and Hyprland has no
+        `switch:Lid Switch` bind of its own. So desktop streaming keeps working
+        with the lid shut and {option}`my.remote.headlessOutput` is not needed
+        for it.
 
         The cost is a laptop that will flatten its battery if left closed in a
-        bag, which is the exact failure hibernation exists to fix. Leave this
-        off on a machine you carry and do not connect to.
+        bag. Two parts to that, and only one has a fix here: the backlight
+        burning behind a closed lid is handled by
+        {option}`my.power.lidBacklightOff`; the machine staying awake at all is
+        inherent, and is the failure hibernation exists to fix.
+
+        BE AWARE THAT HIBERNATION IS NOT AVAILABLE AS AN ESCAPE ON EVERY HOST.
+        {option}`my.power.hibernate.enable` asserts an encrypted root, and
+        hestia's is plain ext4 — so there the realistic alternatives are "awake
+        and reachable" or "plain suspend, unreachable", with no
+        suspend-then-hibernate in between.
+
+        And note there is no remote wake to fall back on: Wake-on-LAN is a
+        Layer-2 broadcast and cannot cross the overlay's Layer-3 tunnel, the
+        usual fix of an always-on relay on the target's LAN does not exist here
+        (no mesh peer shares hestia's subnet), and hestia has no Ethernet at
+        all. A suspended machine stays suspended until somebody touches it.
+      '';
+    };
+
+    lidBacklightOff = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Blank the backlight when the lid closes, without touching the output.
+
+        This exists because of what the measurement above found: with
+        {option}`my.power.remoteAccess` on, a closed lid changes nothing at all
+        — including the backlight, which sits at FULL brightness
+        (`intel_backlight` 96000/96000 on hestia) illuminating the inside of a
+        shut lid. That is pure waste on a machine deliberately kept awake.
+
+        The obvious fix is the wrong one. `hyprctl dispatch dpms off` or
+        disabling the output stops scanout, and scanout is exactly what KMS
+        capture reads — so it would trade a lit panel for a broken stream.
+        Setting brightness to zero keeps the framebuffer alive and only turns
+        the lamp off, which is the one lever that costs nothing.
+
+        Restores the previous brightness on open rather than a fixed value, so
+        it does not quietly become a way of resetting how bright your screen is.
       '';
     };
 

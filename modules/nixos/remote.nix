@@ -180,10 +180,26 @@ in
       description = ''
         Stream a virtual output instead of the panel.
 
-        Turn this on when the panel is not a usable capture source — a closed
-        lid switches the physical output off, and Hyprland "will not exec
-        anything/create any clients" with no monitors at all — or when the
-        remote screen should not be stuck at the panel's resolution.
+        Turn this on when the remote screen should not be stuck at the panel's
+        resolution. That is the only remaining reason.
+
+        IT IS NOT NEEDED FOR A CLOSED LID, which is what this option was
+        originally justified by and the claim was simply wrong for this setup.
+        Measured on hestia 2026-11-02, sampling once a second across a 32-second
+        lid close: eDP-1 stayed `connected`, stayed `enabled`, stayed `dpms=On`,
+        and `hyprctl monitors` kept reporting one monitor with
+        `dpmsStatus: 1` — byte-identical to the lid-open samples. Nothing turns
+        the panel off, because nothing is watching the lid: logind is set to
+        `ignore` by {option}`my.power.remoteAccess` and Hyprland has no
+        `switch:Lid Switch` bind. The framebuffer keeps scanning out, so KMS
+        capture keeps working with the lid shut.
+
+        The generic advice this was taken from applies to compositors that
+        disable the built-in panel themselves on a lid event. Hyprland only does
+        that if you tell it to.
+
+        What a closed lid DOES cost is the backlight — it sits at full
+        brightness behind a shut lid. See {option}`my.power.lidBacklightOff`.
 
         The output is created by a user unit named deliberately `remote`,
         BEFORE Sunshine starts, and both of those matter: Sunshine's `wlr`

@@ -112,6 +112,13 @@
   # bag) and docs/POWER.md.
   my.power.remoteAccess = true;
 
+  # Because remoteAccess means the lid no longer does ANYTHING — measured, not
+  # assumed: a 32-second lid close changed nothing, down to the backlight
+  # sitting at full brightness lighting the inside of a shut lid. This turns the
+  # lamp off and deliberately leaves the output scanning out, so KMS capture
+  # keeps working with the lid down. See my.power.lidBacklightOff.
+  my.power.lidBacklightOff = true;
+
   # Backups. One shared restic repository for every machine here — restic
   # deduplicates across the whole thing, so the licensed artifacts and dotfiles
   # that are identical on several machines cost storage once. Snapshots carry

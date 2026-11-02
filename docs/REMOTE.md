@@ -400,12 +400,31 @@ compositor, so the KMS backend has nothing to read — and `wlr` is the backend
 that crashed the session (see "Streaming killed the whole desktop" below), so
 choosing it has to be deliberate.
 
-Two cases call for it:
+**One case calls for it:** you want a resolution other than the panel's.
 
-- **The lid is closed.** That switches the physical output off, and Hyprland
-  will not create clients with no monitor at all. Note this is a *second*,
-  independent reason the lid must not suspend — see below.
-- **You want a resolution other than the panel's.**
+It used to say two, the other being a closed lid, and **that was wrong.**
+Measured on hestia 2026-11-02, sampled every second across a 32-second lid
+close:
+
+```
+001 lid=open    drm=connected enabled=enabled dpms=On hypr_monitors=1 hypr_dpms=1
+030 lid=closed  drm=connected enabled=enabled dpms=On hypr_monitors=1 hypr_dpms=1
+062 lid=open    drm=connected enabled=enabled dpms=On hypr_monitors=1 hypr_dpms=1
+```
+
+The closed-lid samples are byte-identical to the open ones. Nothing turns the
+panel off, because nothing is watching the lid: `my.power.remoteAccess` sets
+logind to `ignore`, and Hyprland has no `switch:Lid Switch` bind of its own
+(the generic advice this came from describes compositors that blank the
+built-in panel themselves — Hyprland only does that if you tell it to). The
+framebuffer keeps scanning out, so **KMS capture works with the lid shut** and
+no virtual output is needed for it.
+
+What a closed lid *does* cost is the backlight, which stays at full brightness
+(`intel_backlight` 96000/96000) lighting the inside of a shut lid.
+`my.power.lidBacklightOff` turns the lamp off and deliberately leaves the
+output alone — `dpms off` would stop scanout, which is precisely what KMS
+capture reads, so it would trade a lit panel for a dead stream.
 
 It is still the same session and the same compositor — an extra monitor, not a
 second login. The output is created by a user unit ordered `before
@@ -421,10 +440,25 @@ name matters for the same reason — Hyprland otherwise increments
 machine answering while nobody is at it. It stops the two things that suspend it
 unattended: the lid, and hypridle's ten-minute idle timer.
 
-This is not optional for remote access. **A suspended machine cannot be woken.**
-Suspending drops the WireGuard tunnel, and Wake-on-LAN does not traverse an
-overlay network, so there is nothing left listening. Whatever was running is
-gone until somebody physically touches the laptop.
+This is not optional for remote access. **A suspended machine cannot be woken**,
+and on these machines that is a dead end rather than an inconvenience worth
+engineering around. Three separate reasons, all checked on hestia:
+
+1. **Wake-on-LAN is a Layer-2 broadcast and the overlay is Layer 3.** The two
+   ends of a WireGuard tunnel sit in unconnected broadcast domains, so a magic
+   packet cannot cross it. Structural, not a NetBird limitation.
+2. **The standard workaround does not exist here.** It is an always-on device on
+   the target's LAN that takes your request over the tunnel and emits the magic
+   packet locally. hestia is on `192.168.1.0/24`; no mesh peer shares that
+   subnet — forge's NetBird endpoint is the public `159.195.202.232`. Only the
+   gateway and two unidentified hosts are on the LAN.
+3. **hestia has no Ethernet at all.** `wlp0s20f3` is the only interface, so even
+   a relay would need WoWLAN — firmware-dependent on iwlwifi, and still
+   requiring the sender to be on the same L2.
+
+And a laptop that visits café and hotel networks has no relay there by
+definition. So whatever was running is gone until somebody physically touches
+the laptop. Plan around "awake or unreachable", not around waking it.
 
 The five-minute *lock* is deliberately untouched — walking away still secures
 the screen. The machine just stays awake behind it.
@@ -447,6 +481,17 @@ its config in place without dropping sessions. If `busctl` disagrees with
 **The cost:** a laptop that will flatten its battery if left closed in a bag.
 That is exactly the failure hibernation exists to fix (`docs/POWER.md`), and
 turning this on gives it up. Leave it off on a machine you only carry.
+
+`my.power.lidBacklightOff` takes back the easy part of that cost — the panel
+was staying lit behind the closed lid at full brightness — but not the hard
+part, which is the machine being awake at all.
+
+**On hestia there is no middle ground available.** `suspend-then-hibernate`
+would be the right answer, and `my.power.hibernate.enable` asserts an encrypted
+root; hestia's is plain `ext4` on `nvme0n1p2` with no LUKS device declared. So
+the realistic choice there is "awake and reachable" or "plain suspend and
+unreachable, losing the session if the battery runs out". Encrypting the root is
+the prerequisite for anything better — see `docs/POWER.md`.
 
 ## Adding a machine
 

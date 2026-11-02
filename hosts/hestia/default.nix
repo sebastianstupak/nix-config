@@ -10,43 +10,39 @@
 {
   imports = [ ../common ];
 
-  # THE DISCRETE GPU IS DEAD WEIGHT HERE, so its driver does not load.
+  # THE DISCRETE GPU IS DEAD WEIGHT, AND NOUVEAU LOADS ANYWAY — read on, because
+  # the obvious move is the wrong one and this file used to make it.
   #
   # This machine has an NVIDIA RTX A500 at 01:00.0 alongside the Raptor Lake
   # iGPU — which ../../docs/REMOTE.md spent a while denying, on the strength of
   # "no Nvidia GPU" being the right answer for the AMD laptop. It changes
-  # nothing about what draws the desktop: the card has no display outputs
-  # wired to it, so aquamarine enumerates it, finds no KMS, and logs
-  # "Skipping device ... not a KMS device" every session. Hyprland renders on
-  # /dev/dri/card1 (i915) and VA-API encodes on renderD128 (iHD) regardless.
+  # nothing about what draws the desktop: the card has no display outputs wired
+  # to it, so aquamarine enumerates it, finds no KMS, and logs "Skipping device
+  # ... not a KMS device" every session. Hyprland renders on /dev/dri/card1
+  # (i915) and VA-API encodes on renderD128 (iHD) regardless.
   #
-  # What it DID do was cost. Sunshine probes an nvenc/CUDA encoder on every
-  # single stream because an NVIDIA device is present, fails it
-  # ("Failed to create a CUDA device: Operation not permitted" — nouveau
-  # offers no CUDA and never will), and the card sat permanently at
-  # power/control=on. Blacklisting the driver removes /dev/dri/card0 and
-  # renderD129 entirely, so the probe has nothing to find.
+  # So it was blacklisted, to stop Sunshine probing an nvenc/CUDA encoder on
+  # every stream and failing it ("Failed to create a CUDA device" — nouveau
+  # offers no CUDA and never will). THAT MADE THE POWER WORSE, or at best
+  # changed nothing: on an Optimus laptop the chip is put into D3cold by the
+  # DRIVER's runtime PM, so with nothing bound there is nothing left to invoke
+  # the ACPI power-off and it can sit in D0 indefinitely. The documented remedy
+  # for "power is still high after disabling the dGPU" is to remove the
+  # blacklist and let nouveau load.
   #
-  # nvidiafb goes too: it binds the same device and is the other module the
-  # kernel would try. Nothing here wants the dGPU — no CUDA workload, no
-  # external-display duty, no gaming on this host (that is zagreus).
+  # The giveaway was that power/control read "on" both before and after the
+  # blacklist, because TLP pins runtime PM on AC (see RUNTIME_PM_ON_AC in
+  # ../../modules/nixos/laptop.nix, now "auto"). Nothing was ever suspending
+  # this GPU; the blacklist only silenced a log line.
   #
-  # Reversing this is one line, but note what it is NOT: a power switch. With
-  # no driver bound the chip's power state is firmware's decision, and TLP
-  # pins runtime PM to "on" for everything while on AC. The udev rule below
-  # asks for "auto" on this one device so the kernel is at least permitted to
-  # suspend it; the only guaranteed off is the BIOS graphics setting. Verify
-  # with `cat /sys/bus/pci/devices/0000:01:00.0/power/runtime_status`.
-  boot.blacklistedKernelModules = [
-    "nouveau"
-    "nvidiafb"
-  ];
-
-  services.udev.extraRules = ''
-    # RTX A500 (01:00.0) — unbound and unwanted; let the kernel suspend it.
-    # Narrow on purpose: TLP's AC profile is left alone for every other device.
-    ACTION=="add", SUBSYSTEM=="pci", KERNEL=="0000:01:00.0", ATTR{power/control}="auto"
-  '';
+  # So: no blacklist, and the driver is left to do its job. The CUDA probe
+  # noise comes back and is simply accepted — about 0.4s per Sunshine start,
+  # which Sunshine itself prints "Ignore any errors mentioned above" about.
+  #
+  # Verify rather than trust, because this is the whole point of the change:
+  #   cat /sys/bus/pci/devices/0000:01:00.0/power/runtime_status   # want: suspended
+  # If it still says "active" on battery, the dGPU is awake and the BIOS
+  # graphics setting is the only guaranteed off.
 
   # A NAME OF ITS OWN, and the reason is not cosmetic. Both machines answered to
   # `workstation`, and restic's `forget --group-by host` groups snapshots by

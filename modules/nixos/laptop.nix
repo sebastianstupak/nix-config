@@ -10,6 +10,27 @@
   services.tlp.enable = true;
   powerManagement.enable = true;
 
+  # PCIe autosuspend ON AC TOO, which is not TLP's default and is the only
+  # reason anything idle can actually power down while plugged in.
+  #
+  # Unset, RUNTIME_PM_ON_AC is "on" — devices held awake permanently on AC. That
+  # is the conservative choice and it is usually invisible, but on hestia it was
+  # load-bearing in the wrong direction: the discrete RTX A500 read
+  # power/control=on forever, so nothing ever invoked its ACPI power-off, and a
+  # whole round of "disable the dGPU" work changed nothing because the pinning
+  # was the actual cause (see hosts/hestia/default.nix).
+  #
+  # "auto" only PERMITS the kernel to suspend an idle device; it does not force
+  # anything. The documented risk is hardware that misbehaves when autosuspended
+  # — if something flaky turns up, exclude that one device via
+  # RUNTIME_PM_DENYLIST rather than reverting this, because the global pin is
+  # what hid the problem in the first place.
+  #
+  # Both machines: zagreus is all-AMD with nothing exotic on its bus, and the
+  # setting is equally correct there. Check what it actually did with
+  # `tlp-stat -p`, or per-device under /sys/bus/pci/devices/*/power/control.
+  services.tlp.settings.RUNTIME_PM_ON_AC = "auto";
+
   # What the lid does, when to warn about the battery and what happens when it
   # runs out are all policy rather than hardware enablement — modules/nixos/power.nix.
 

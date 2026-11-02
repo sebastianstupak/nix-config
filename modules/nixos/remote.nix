@@ -238,23 +238,31 @@ in
       # NOT opened globally — see the per-interface rules above.
       openFirewall = false;
 
-      # CAP_SYS_ADMIN is for DRM/KMS capture, and `capture = "wlr"` below means
-      # we do not do DRM/KMS capture. Leaving it off is not just tidiness: the
-      # capability applies to the whole binary, and it breaks launching
-      # applications as the ordinary user. We only ever want desktop capture,
-      # so there is nothing to trade away. If capture ever fails outright, the
-      # fallback is kms + this flag — docs/REMOTE.md.
+      # CAP_SYS_ADMIN enables DRM/KMS capture, which is what `capture = "kms"`
+      # below now uses (switched from wlr 2026-11-02 — wlr-screencopy has live
+      # Hyprland capture regressions: black screen / stream won't start,
+      # LizardByte/Sunshine#5671, moonlight-qt#1201). KMS works here WITHOUT the
+      # capability on the current kernel/Sunshine, so it stays off: the capability
+      # applies to the whole binary and breaks launching apps as the ordinary user
+      # (irrelevant for desktop-only, but no reason to grant it). If KMS capture
+      # ever fails outright (black screen), flip this to true — documented
+      # fallback. docs/REMOTE.md.
       capSysAdmin = false;
 
       settings = {
         sunshine_name = config.networking.hostName;
 
-        # wlroots capture, the native path for Hyprland. Also the only backend
-        # that can see a virtual output, so my.remote.headlessOutput depends on
-        # it. (The black-frame reports against this backend are Nvidia's tiled
-        # framebuffer layout, which neither of these machines has — one is AMD,
-        # the other Intel.)
-        capture = "wlr";
+        # KMS (DRM) capture. Switched from wlr 2026-11-02: wlr-screencopy on
+        # Hyprland has live capture regressions (black screen / stream won't
+        # start — LizardByte/Sunshine#5671, moonlight-qt#1201). KMS grabs the
+        # panel's DRM framebuffer directly and is steadier on Hyprland.
+        #
+        # TRADE-OFF: KMS cannot see a virtual output, so `my.remote.headlessOutput`
+        # (lid-closed streaming) does NOT work with it — keep headlessOutput false
+        # and the panel ON (lid open) to capture. For lid-closed remote streaming,
+        # switch back to wlr + headlessOutput (and accept the wlr bugs) or add a
+        # dummy-plug / `hyprctl output create headless`. docs/REMOTE.md.
+        capture = "kms";
 
         output_name = if cfg.headlessOutput then "remote" else cfg.output;
 

@@ -2,6 +2,7 @@
 # lock/idle, and supporting utilities. System-level Hyprland (the session) is
 # enabled in modules/nixos/desktop.nix; here we own the per-user config.
 {
+  config,
   lib,
   osConfig,
   pkgs,
@@ -253,7 +254,39 @@
       };
     };
   };
-  programs.hyprlock.enable = true;
+  programs.hyprlock = {
+    enable = true;
+
+    # WHICH LAYOUT THE PASSWORD IS ABOUT TO BE TYPED IN.
+    #
+    # `kb_layout = us,sk` with `grp:alt_shift_toggle` above means the active
+    # layout is a mode you can leave the machine in — and hyprlock showed no
+    # indication of it, while waybar (which does show it) is not drawn on the
+    # lock screen. So the one moment the layout matters most was the one moment
+    # it was invisible.
+    #
+    # That is a lockout risk rather than a cosmetic gap: `sk` moves y/z and most
+    # of the symbol row, so a password typed in the wrong layout fails with
+    # nothing on screen to explain why, and the natural response — retype it
+    # more carefully — fails identically. It is worse remotely, where the only
+    # other way in is `loginctl unlock-session` over SSH.
+    #
+    # Stylix owns the colours of `background` and `input-field` (see
+    # modules/nixos/stylix.nix); it does not style labels, so this one takes
+    # base05 from the same palette rather than hardcoding a colour that would
+    # not follow a scheme change.
+    settings.label = {
+      text = "$LAYOUT";
+      color = "rgb(${config.lib.stylix.colors.base05})";
+      font_size = 16;
+      halign = "center";
+      valign = "center";
+      # Below the input field. hyprlock does not validate geometry and
+      # `nix flake check` only verifies the HYPRLAND config, not this one, so if
+      # it ever collides with the field this number is the thing to nudge.
+      position = "0, -130";
+    };
+  };
   services.hypridle = {
     enable = true;
     settings = {
@@ -267,14 +300,24 @@
         # unlock_cmd the unlock event arrives and nothing happens. Locking
         # worked and unlocking silently did not.
         #
-        # That matters for remote access specifically. The machine locks itself
-        # after five minutes whether or not anybody is coming back, and the
-        # alternative way in — typing the passphrase into hyprlock through the
-        # video stream — depends on the capture backend being able to see a
-        # session-locked screen, which is exactly the thing Hyprland's
-        # session-lock protocol is designed to prevent other clients from
-        # doing. An SSH connection is already authenticated by a key, so
-        # unlocking over it is both more reliable and no weaker.
+        # That matters for remote access specifically: the machine locks itself
+        # after five minutes whether or not anybody is coming back.
+        #
+        # THE OTHER WAY IN NOW WORKS TOO, and the old reasoning here was only
+        # ever true of the `wlr` capture backend. It said typing the passphrase
+        # into hyprlock through the video stream depends on the backend being
+        # able to see a session-locked screen, which is exactly what Hyprland's
+        # session-lock protocol stops other CLIENTS from doing. But
+        # my.remote.capture is `kms` now (modules/nixos/remote.nix), and KMS
+        # capture is not a Wayland client — it reads the scanout framebuffer
+        # underneath the protocol. Verified 2026-11-02: session locked, Moonlight
+        # connected from the Windows machine, the hyprlock screen was visible
+        # and typeable, and `grep -c "drm fb for plane"` stayed at zero.
+        #
+        # Keep unlocking over SSH as the DEFAULT anyway. It is already
+        # authenticated by a key, it does not put the passphrase through a video
+        # stream and an input path shared with whatever else is paired, and it
+        # still works if the capture backend ever changes back.
         #
         # SIGUSR1, not a kill: it is hyprlock's clean-unlock signal. Killing
         # the process while an ext-session-lock is held leaves the compositor

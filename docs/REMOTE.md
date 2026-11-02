@@ -469,18 +469,28 @@ engineering around. Three separate reasons, all checked on hestia:
 1. **Wake-on-LAN is a Layer-2 broadcast and the overlay is Layer 3.** The two
    ends of a WireGuard tunnel sit in unconnected broadcast domains, so a magic
    packet cannot cross it. Structural, not a NetBird limitation.
-2. **The standard workaround does not exist here.** It is an always-on device on
-   the target's LAN that takes your request over the tunnel and emits the magic
-   packet locally. hestia is on `192.168.1.0/24`; no mesh peer shares that
-   subnet — forge's NetBird endpoint is the public `159.195.202.232`. Only the
-   gateway and two unidentified hosts are on the LAN.
-3. **hestia has no Ethernet at all.** `wlp0s20f3` is the only interface, so even
-   a relay would need WoWLAN — firmware-dependent on iwlwifi, and still
-   requiring the sender to be on the same L2.
+2. **The standard workaround is not set up** — an always-on device on the
+   target's LAN that takes your request over the tunnel and emits the magic
+   packet locally. This bullet used to say no mesh peer shares hestia's subnet,
+   concluded from forge's public endpoint (`159.195.202.232`). **That was
+   wrong**: `netbird status -d` shows apollo's ICE endpoint as
+   `192.168.1.223:51822` — apollo is on hestia's LAN and is a mesh peer, so a
+   relay is available at home. I had simply not checked the right peer.
+3. **hestia has no built-in Ethernet**, and this is now conditional too.
+   `wlp0s20f3` is the only onboard NIC, so WoL would need WoWLAN —
+   firmware-dependent on iwlwifi, and `/proc/acpi/wakeup` lists no entry for the
+   wifi device, so it is not an armed wake source. But a USB-C dock adds
+   `enp0s13f0u1u1u4` (`r8152`, Realtek RTL8153), and Realtek USB NICs do
+   implement magic-packet WoL.
 
-And a laptop that visits café and hotel networks has no relay there by
-definition. So whatever was running is gone until somebody physically touches
-the laptop. Plan around "awake or unreachable", not around waking it.
+So the honest position is **not set up, and conditionally feasible** rather than
+impossible. What would have to hold: hestia docked, the dock's NIC armed for
+WoL, and USB power maintained across suspend — which is the shaky link, since
+docks commonly drop the device in S3/s2idle. Untested.
+
+And it only ever helps at home. A laptop on café and hotel networks has no
+relay there by definition, so the planning assumption stays "awake or
+unreachable" — just not because a relay is unobtainable.
 
 The five-minute *lock* is deliberately untouched — walking away still secures
 the screen. The machine just stays awake behind it.

@@ -94,11 +94,17 @@ in
         and reachable" or "plain suspend, unreachable", with no
         suspend-then-hibernate in between.
 
-        And note there is no remote wake to fall back on: Wake-on-LAN is a
-        Layer-2 broadcast and cannot cross the overlay's Layer-3 tunnel, the
-        usual fix of an always-on relay on the target's LAN does not exist here
-        (no mesh peer shares hestia's subnet), and hestia has no Ethernet at
-        all. A suspended machine stays suspended until somebody touches it.
+        And note there is no remote wake SET UP to fall back on. Wake-on-LAN is
+        a Layer-2 broadcast and cannot cross the overlay's Layer-3 tunnel, so it
+        needs a relay on the target's LAN. This comment used to say no such peer
+        exists; that was wrong — apollo's ICE endpoint is `192.168.1.223`, i.e.
+        on hestia's LAN. And while hestia has no onboard Ethernet, a USB-C dock
+        adds an r8152 NIC, which does implement magic-packet WoL.
+
+        So it is conditionally feasible rather than impossible, and the shaky
+        link is USB power across suspend. Untested, and useless away from home
+        where there is no relay at all — so a suspended machine should still be
+        assumed to stay suspended until somebody touches it. docs/REMOTE.md.
       '';
     };
 

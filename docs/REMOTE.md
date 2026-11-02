@@ -418,26 +418,29 @@ logind to `ignore`, and Hyprland has no `switch:Lid Switch` bind of its own
 (the generic advice this came from describes compositors that blank the
 built-in panel themselves — Hyprland only does that if you tell it to).
 
-**Be careful what you conclude from that.** It disproves the old claim — the
-output, the connector and the compositor's monitor all survive a closed lid, so
-a virtual output is not needed to *have something to capture*. It does **not**
-on its own prove the stream stays good, and the distinction is not academic:
+That disproves the old claim, but it only establishes that there is something
+*to* capture — the connector, not the plane Sunshine actually reads. The stream
+surviving had to be tested separately, because:
 
 - Sunshine's KMS backend captures a **plane**, and its documented failure mode
   is that plane losing its framebuffer — `Couldn't get drm fb for plane [0]`,
   logged roughly sixty times a second behind a black picture.
-- Every indicator in that table can stay green while that happens. They
-  describe the connector, not the plane.
+- Every indicator in that table can stay green while that happens.
 - The upstream fix that reinitialises capture after a plane has been empty for
   250 ms ([Sunshine #5885](https://github.com/LizardByte/Sunshine/pull/5885))
-  is **not** in the version packaged here, so there is no self-recovery.
+  is **not** in the version packaged here, so a black stream would not recover.
 
-So treat lid-closed streaming as confirmed only after an actual lid-closed
-stream:
+**Tested 2026-11-02 and it works.** Lid shut, Moonlight connected from the
+Windows machine, interacted with for a stretch, real picture throughout, and
+over the whole window:
 
 ```bash
-journalctl --user -u sunshine | grep -c "drm fb for plane"   # want 0
+journalctl --user -u sunshine | grep -c "drm fb for plane"   # returned 0
 ```
+
+So lid-closed streaming is confirmed and `headlessOutput` is not needed for it.
+Re-run that grep after any Sunshine or Hyprland update — it is the cheap canary
+for the plane going empty.
 
 What a closed lid *does* cost is the backlight, which stays at full brightness
 (`intel_backlight` 96000/96000) lighting the inside of a shut lid.
@@ -690,6 +693,26 @@ Pairing state is different and does persist — it lives in
   followed by `Found monitor for DRM screencasting` and
   `Found H.264 encoder: h264_vaapi [vaapi]`. Those last two are the lines that
   actually mean capture works.
+
+  **Open problem — the grant stops working after a switch.** Straight after a
+  boot the unit logs `effective cap:21`. After the rebuilds of 2026-11-02 the
+  same unit logged `Failed to gain CAP_SYS_ADMIN` instead — with the same
+  `ExecStart`, `/run/wrappers/bin/sunshine` still carrying
+  `cap_setpcap,cap_sys_admin=p`, `NoNewPrivileges=no`, `cap_sys_admin` in the
+  bounding set and `/run/wrappers` not `nosuid` — **and KMS capture streamed
+  anyway.** So there is a second route to the DRM framebuffer that sometimes
+  works without the capability, and it is not dependable: the unwrapped test
+  above failed outright on the same machine the same day.
+
+  A reboot restored the grant. Don't let a working stream reassure you — check:
+
+  ```bash
+  journalctl --user -u sunshine -b | grep -E "effective cap:21|Failed to gain"
+  ```
+
+  If it needs chasing, suspect the wrapper's capabilities being lost across the
+  second exec into `bin/.sunshine-wrapped` (ambient vs permitted), not this
+  config.
 
 ### Log noise that is expected, not broken
 

@@ -193,21 +193,22 @@ in
         `ignore` by {option}`my.power.remoteAccess` and Hyprland has no
         `switch:Lid Switch` bind.
 
-        WHAT THAT DOES AND DOES NOT ESTABLISH. It establishes that the output,
-        the connector and the compositor's monitor all survive a lid close —
-        which is what this option's original justification denied. It does NOT
-        by itself establish that KMS capture still yields frames, because
-        Sunshine captures a PLANE and its documented failure mode is the plane
-        losing its framebuffer: `Couldn't get drm fb for plane [0]`, logged
-        about sixty times a second behind a black stream. Every sysfs indicator
-        above can stay green while that happens, and the upstream fix that
-        reinitialises after a plane has been empty for 250ms
-        (LizardByte/Sunshine#5885) is NOT in the version packaged here — so
-        there would be no self-recovery.
+        AND THE STREAM SURVIVES TOO, which did not follow from the above and
+        had to be tested separately. Sunshine captures a PLANE, not a
+        connector, and its documented failure is that plane losing its
+        framebuffer — `Couldn't get drm fb for plane [0]`, logged about sixty
+        times a second behind a black picture, with every sysfs indicator above
+        still green. The upstream fix that reinitialises after a plane has been
+        empty for 250ms (LizardByte/Sunshine#5885) is NOT in the version
+        packaged here, so a black stream would not have recovered.
 
-        Confirm with an actual lid-closed stream and
-        `journalctl --user -u sunshine | grep "drm fb for plane"` before relying
-        on it.
+        Tested 2026-11-02 from the Windows machine: lid shut, Moonlight
+        connected, interacted with for a stretch, real picture throughout, and
+        `grep -c "drm fb for plane"` over the whole window returned ZERO. So
+        lid-closed streaming works and this option is not needed for it.
+
+        Re-check with that same grep if Sunshine or Hyprland is updated — it is
+        the cheap canary for the plane going empty.
 
         The generic advice this was taken from applies to compositors that
         disable the built-in panel themselves on a lid event. Hyprland only does
@@ -342,8 +343,11 @@ in
       # CAP_SYS_ADMIN is what DRM/KMS capture needs, so it follows the backend
       # rather than being a standing decision.
       #
-      # IT IS NOT OPTIONAL UNDER `kms`, and the reason that is worth stating is
-      # that the obvious check says otherwise. Without the capability Sunshine
+      # TREAT IT AS REQUIRED UNDER `kms`, but know that the evidence is mixed
+      # and the grant is currently NOT WORKING — see the note at the end.
+      #
+      # The reason to state the requirement at all is that the obvious check
+      # says otherwise. Without the capability Sunshine
       # still enumerates the KMS monitor list perfectly —
       # "Monitor 0 is eDP-1: AU Optronics 0x6DA8" — so the one output you would
       # look at to confirm KMS works looks healthy. Capture then fails at init:
@@ -363,6 +367,26 @@ in
       # user. Affordable here only because nothing asks Sunshine to launch
       # anything — Moonlight connects to the Desktop entry and streams the
       # session that is already running.
+      #
+      # OPEN PROBLEM, and do not let a working stream reassure you out of it.
+      # Straight after a boot the unit logs
+      # "has_elevated_privileges found effective cap:21" and all is well. After
+      # the nixos-rebuild switches of 2026-11-02 the same unit — same
+      # ExecStart, /run/wrappers/bin/sunshine still carrying
+      # cap_setpcap,cap_sys_admin=p, NoNewPrivileges=no, cap_sys_admin in the
+      # bounding set, /run/wrappers not nosuid — logs
+      # "Failed to gain CAP_SYS_ADMIN" instead, and yet KMS capture still
+      # found its monitor and streamed. So there is a second path to the DRM
+      # framebuffer that sometimes works without the capability, and it is not
+      # dependable: the unwrapped-binary test failed outright on the same
+      # machine the same day.
+      #
+      # Net effect is a system that streams while silently relying on the
+      # fallback. A REBOOT restored the capability last time; if that stops
+      # working, suspect the security wrapper's caps being lost across the
+      # second exec into bin/.sunshine-wrapped (ambient vs permitted) rather
+      # than anything in this file. Canary:
+      #   journalctl --user -u sunshine -b | grep -E "effective cap:21|Failed to gain"
       capSysAdmin = cfg.capture == "kms";
 
       settings = {

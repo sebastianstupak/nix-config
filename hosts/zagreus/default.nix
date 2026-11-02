@@ -7,6 +7,9 @@
 {
   imports = [ ../common ];
 
+  # Bringing this machine online end to end — the parts that are NOT
+  # declarative (its two SSH keys, the gateway NAT rule, Sunshine pairing) plus
+  # what to verify afterwards: ../../docs/ZAGREUS.md.
   networking.hostName = "zagreus";
 
   # ITS OWN WIREGUARD PORT, one above hestia's. Allocation and the reason:

@@ -124,7 +124,9 @@ secrets/common/               Encrypted, readable by every machine (restic creds
 secrets/<host>/               Encrypted to that machine + you only — see secrets/README.md
 docs/                         Workflows a human follows, not module rationale
                               (INSTALL.md, ABLETON.md, ORGS.md, GAMING.md,
-                              MUSIC.md, BACKUP.md, POWER.md, REMOTE.md, GATHR.md).
+                              MUSIC.md, BACKUP.md, POWER.md, REMOTE.md, GATHR.md,
+                              ZAGREUS.md — the non-declarative half of bringing a
+                              host online, and the template for machine #3).
                               A module comment explains
                               why a line of Nix exists; a doc explains what to do
                               on a new machine. Link the doc from the module.

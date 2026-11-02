@@ -520,6 +520,11 @@ the prerequisite for anything better — see `docs/POWER.md`.
 The bare-metal install is `docs/INSTALL.md`. This is only the remote-access
 wiring, and it assumes the machine already boots this config.
 
+**For an ordered checklist rather than reasoning, see `docs/ZAGREUS.md`** — it
+walks the same ground as a bring-up sequence, with the verification commands
+and the AMD-specific unknowns, and is written to serve as the template for
+machine #3.
+
 Most of it is automatic now. **NetBird enrolment needs nothing**: the setup key
 is in sops, `services.netbird.clients.default.login.setupKeyFile` hands it to
 the daemon, the key auto-joins `my-devices`, and the policies apply the moment

@@ -7,13 +7,18 @@ paired, you never pair that client<->host again.
 
 ## One-time setup (per host)
 
-Each Sunshine host has **its own** admin password. Put it in a local file the
-script reads — it is never passed on a command line or committed:
+Each Sunshine host has **its own** admin password. Store it **encrypted** — the
+script prompts for it hidden and writes a Windows **DPAPI** blob that only *your
+Windows account, on this machine* can decrypt. The password is never typed on a
+command line, never written in plaintext, and never committed:
 
 ```powershell
-New-Item -ItemType Directory -Force "$HOME\.config\sunshine-pair" | Out-Null
-'your-sunshine-admin-password' | Set-Content "$HOME\.config\sunshine-pair\hestia.netbird.cloud.pass"
+.\pair-sunshine.ps1 hestia.netbird.cloud -SetPassword
 ```
+
+The resulting `~\.config\sunshine-pair\hestia.netbird.cloud.pass` is ciphertext
+(begins `01000000d08c9ddf…`, the DPAPI header) and is additionally ACL-locked to
+your user. Copying it to another PC or user makes it undecryptable — by design.
 
 If you don't know the host's password (or it was rotated), set a fresh one on
 the host over SSH — no old password needed:

@@ -43,7 +43,8 @@ param(
   [string]$HostFqdn,
   [string]$Name = $env:COMPUTERNAME,
   [string]$User = 'sebastianstupak',
-  [string]$SecretFile
+  [string]$SecretFile,
+  [switch]$SetPassword
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,23 +52,44 @@ $LocalPort = 17990   # 47990 is reserved on some Windows hosts; any free port wo
 
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
+# Each host has its OWN Sunshine admin password, stored ENCRYPTED with Windows
+# DPAPI (ConvertFrom-SecureString, no key): the on-disk blob is decryptable ONLY
+# by this Windows user on this machine. The password is never typed on a command
+# line (prompted hidden) and never written in plaintext.
+if (-not $SecretFile) { $SecretFile = Join-Path $HOME ".config\sunshine-pair\$HostFqdn.pass" }
+
+# --- -SetPassword: prompt (hidden), encrypt, store, exit ----------------------
+if ($SetPassword) {
+  New-Item -ItemType Directory -Force (Split-Path $SecretFile) | Out-Null
+  $secIn = Read-Host -AsSecureString "Sunshine admin password for $HostFqdn (hidden)"
+  if ($secIn.Length -eq 0) { Fail "Empty password; nothing written." }
+  ConvertFrom-SecureString -SecureString $secIn | Set-Content -Path $SecretFile -Encoding ASCII
+  # defense in depth on top of DPAPI: strip inheritance, grant only this user read
+  try { icacls $SecretFile /inheritance:r /grant:r "$($env:USERNAME):R" | Out-Null } catch { }
+  Write-Host "Encrypted password stored at $SecretFile" -ForegroundColor Green
+  Write-Host "(DPAPI-bound: only $env:USERNAME on $env:COMPUTERNAME can decrypt it.)" -ForegroundColor Green
+  exit 0
+}
+
 # --- locate Moonlight ---------------------------------------------------------
 $moon = Get-ChildItem 'C:\Program Files*' -Recurse -Filter Moonlight.exe -ErrorAction SilentlyContinue |
   Select-Object -First 1 -ExpandProperty FullName
 if (-not $moon) { Fail "Moonlight.exe not found. Install it: winget install MoonlightGameStreamingProject.Moonlight" }
 
-# --- read the admin password from the local secret file (never from args) -----
-if (-not $SecretFile) { $SecretFile = Join-Path $HOME ".config\sunshine-pair\$HostFqdn.pass" }
+# --- load + DPAPI-decrypt the admin password (never plaintext on disk) ---------
 if (-not (Test-Path $SecretFile)) {
   Fail @"
-No secret file at: $SecretFile
-Create it once (each host has its own Sunshine admin password):
-    New-Item -ItemType Directory -Force (Split-Path '$SecretFile') | Out-Null
-    'your-sunshine-admin-password' | Set-Content '$SecretFile'
+No password set for $HostFqdn.
+Set it once (prompts hidden, stores DPAPI-encrypted for your Windows account):
+    .\pair-sunshine.ps1 $HostFqdn -SetPassword
 "@
 }
-$pass = (Get-Content $SecretFile -TotalCount 1).Trim()
-if (-not $pass) { Fail "Secret file is empty: $SecretFile" }
+try {
+  $secPass = (Get-Content $SecretFile -Raw).Trim() | ConvertTo-SecureString -ErrorAction Stop
+}
+catch {
+  Fail "Could not decrypt $SecretFile with your Windows account. DPAPI is user+machine bound, so a blob created by -SetPassword on THIS PC as THIS user is required (not a copied file, not old plaintext). Re-run with -SetPassword."
+}
 
 # --- open the SSH tunnel to the host's localhost-only Sunshine web UI ---------
 Write-Host "Opening SSH tunnel to $HostFqdn (localhost:$LocalPort -> :47990)..." -ForegroundColor Cyan
@@ -101,7 +123,15 @@ try {
   # CSRF check treats us as a non-browser client and skips the token. We must
   # pass the pending session's pairing_id, which Moonlight created above and we
   # read from GET /api/pin (it lists pending pairings with their id/name/address).
-  $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${User}:${pass}"))
+  # decrypt to plaintext only transiently in memory, to build the Basic header
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
+  try {
+    $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${User}:${plain}"))
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr); $plain = $null
+  }
 
   $pairingId = $null; $pending = ''
   for ($i = 0; $i -lt 12; $i++) {

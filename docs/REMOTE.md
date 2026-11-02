@@ -416,9 +416,28 @@ The closed-lid samples are byte-identical to the open ones. Nothing turns the
 panel off, because nothing is watching the lid: `my.power.remoteAccess` sets
 logind to `ignore`, and Hyprland has no `switch:Lid Switch` bind of its own
 (the generic advice this came from describes compositors that blank the
-built-in panel themselves — Hyprland only does that if you tell it to). The
-framebuffer keeps scanning out, so **KMS capture works with the lid shut** and
-no virtual output is needed for it.
+built-in panel themselves — Hyprland only does that if you tell it to).
+
+**Be careful what you conclude from that.** It disproves the old claim — the
+output, the connector and the compositor's monitor all survive a closed lid, so
+a virtual output is not needed to *have something to capture*. It does **not**
+on its own prove the stream stays good, and the distinction is not academic:
+
+- Sunshine's KMS backend captures a **plane**, and its documented failure mode
+  is that plane losing its framebuffer — `Couldn't get drm fb for plane [0]`,
+  logged roughly sixty times a second behind a black picture.
+- Every indicator in that table can stay green while that happens. They
+  describe the connector, not the plane.
+- The upstream fix that reinitialises capture after a plane has been empty for
+  250 ms ([Sunshine #5885](https://github.com/LizardByte/Sunshine/pull/5885))
+  is **not** in the version packaged here, so there is no self-recovery.
+
+So treat lid-closed streaming as confirmed only after an actual lid-closed
+stream:
+
+```bash
+journalctl --user -u sunshine | grep -c "drm fb for plane"   # want 0
+```
 
 What a closed lid *does* cost is the backlight, which stays at full brightness
 (`intel_backlight` 96000/96000) lighting the inside of a shut lid.

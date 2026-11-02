@@ -191,8 +191,23 @@ in
         `dpmsStatus: 1` — byte-identical to the lid-open samples. Nothing turns
         the panel off, because nothing is watching the lid: logind is set to
         `ignore` by {option}`my.power.remoteAccess` and Hyprland has no
-        `switch:Lid Switch` bind. The framebuffer keeps scanning out, so KMS
-        capture keeps working with the lid shut.
+        `switch:Lid Switch` bind.
+
+        WHAT THAT DOES AND DOES NOT ESTABLISH. It establishes that the output,
+        the connector and the compositor's monitor all survive a lid close —
+        which is what this option's original justification denied. It does NOT
+        by itself establish that KMS capture still yields frames, because
+        Sunshine captures a PLANE and its documented failure mode is the plane
+        losing its framebuffer: `Couldn't get drm fb for plane [0]`, logged
+        about sixty times a second behind a black stream. Every sysfs indicator
+        above can stay green while that happens, and the upstream fix that
+        reinitialises after a plane has been empty for 250ms
+        (LizardByte/Sunshine#5885) is NOT in the version packaged here — so
+        there would be no self-recovery.
+
+        Confirm with an actual lid-closed stream and
+        `journalctl --user -u sunshine | grep "drm fb for plane"` before relying
+        on it.
 
         The generic advice this was taken from applies to compositors that
         disable the built-in panel themselves on a lid event. Hyprland only does

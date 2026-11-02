@@ -77,9 +77,10 @@ in
         second, eDP-1 stayed `connected`/`enabled`/`dpms=On` and Hyprland kept
         one monitor at `dpmsStatus: 1`, identical to lid-open. Nothing watches
         the lid once this option sets logind to `ignore`, and Hyprland has no
-        `switch:Lid Switch` bind of its own. So desktop streaming keeps working
-        with the lid shut and {option}`my.remote.headlessOutput` is not needed
-        for it.
+        `switch:Lid Switch` bind of its own. So there is still something to
+        capture with the lid shut, and {option}`my.remote.headlessOutput` is not
+        needed to create one — see the caveat on that option about why a live
+        plane is a separate question from a live connector.
 
         The cost is a laptop that will flatten its battery if left closed in a
         bag. Two parts to that, and only one has a fix here: the backlight

@@ -341,9 +341,11 @@ On Intel this needs `intel-media-driver` — `hardware.graphics.enable` does not
 provide it, and its absence is exactly how a silent software fallback happens
 (see "Things that went wrong"). AMD gets VA-API from Mesa and needs nothing.
 
-The `CUDA` / `nvenc` errors are expected on both machines — no Nvidia GPU.
-Sunshine says so itself: *"Ignore any errors mentioned above, they are not
-relevant."*
+The `CUDA` / `nvenc` errors are expected and harmless. On `zagreus` there is no
+Nvidia hardware at all; on `hestia` there *is* a discrete RTX A500, but
+`hosts/hestia/default.nix` blacklists nouveau precisely so Sunshine stops
+probing a CUDA encoder that can never exist. Either way Sunshine says it
+itself: *"Ignore any errors mentioned above, they are not relevant."*
 
 ### Pairing (once per client)
 
@@ -631,9 +633,11 @@ Sunshine probes every encoder at startup and says so itself — "Ignore any erro
 mentioned above, they are not relevant." Specifically:
 
 - **`Failed to create a CUDA device` / `Cannot load libcuda.so.1`** — the nvenc
-  probe. Neither machine has an Nvidia GPU. The probe is left in place rather
-  than pinning `encoder = "vaapi"`, because auto-detection is self-healing if
-  the hardware ever changes and the cost is about two seconds of benign log at
+  probe. `zagreus` has no Nvidia GPU; `hestia` has an RTX A500 whose driver is
+  blacklisted (`hosts/hestia/default.nix`), which is what stops the probe
+  finding a device to fail against. The probe is left in place rather than
+  pinning `encoder = "vaapi"`, because auto-detection is self-healing if the
+  hardware ever changes and the cost is about two seconds of benign log at
   session start.
 - **`No usable encoding entrypoint found for profile VAProfileAV1Profile0`** —
   Raptor Lake decodes AV1 but does not encode it. Sunshine falls back to
@@ -654,7 +658,9 @@ mentioned above, they are not relevant." Specifically:
   may not advertise itself over mDNS, and carrying on. That is the intended
   state — see the mDNS note above.
 - **Black frames are an Nvidia problem**, not a Hyprland one: the `wlr` backend
-  cannot read Nvidia's tiled framebuffer layout. Neither machine here has one.
+  cannot read Nvidia's tiled framebuffer layout. Neither machine *renders* on
+  one — `hestia`'s RTX A500 has no display outputs wired to it and its driver
+  is blacklisted, so Hyprland renders on the Intel iGPU and encodes with iHD.
 - **Sunshine's user unit needs `graphical-session.target` to actually be
   reached.** The usual complaint on Wayland window managers is that it never
   starts because nothing starts that target. `programs.hyprland.withUWSM`

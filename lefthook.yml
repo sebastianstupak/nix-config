@@ -31,6 +31,17 @@ pre-commit:
       glob: "*.nix"
       run: if command -v statix >/dev/null 2>&1; then statix check; else echo skip-statix; fi
 
+    # Only when the commit touches secrets or the recipient list — the two cases
+    # where holding the wrong personal age key does damage. `.sops.yaml` is the
+    # source of truth for which key that is; the script guards itself and exits
+    # 0 when it cannot check, so no Nix is required. Why it is a hook and not a
+    # flake check: the key lives outside the repo and the build sandbox.
+    - name: age-key
+      glob:
+        - "secrets/**"
+        - ".sops.yaml"
+      run: bash scripts/check-age-key.sh
+
 # Heavier full-evaluation gate — runs on push, not on every commit.
 pre-push:
   jobs:

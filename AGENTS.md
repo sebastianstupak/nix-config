@@ -99,7 +99,8 @@ treefmt.nix                   nixfmt-rfc-style config for `nix fmt`
 lefthook.yml                  pre-commit/pre-push linters (nixfmt/deadnix/statix, flake check)
 statix.toml                   statix lint config (ignores generated hardware configs)
 .githooks/                    committed git hooks (commit-msg, pre-commit, pre-push)
-scripts/                      helper scripts (commit-msg.sh: Conventional Commits check)
+scripts/                      helper scripts (commit-msg.sh: Conventional Commits check;
+                              check-age-key.sh: personal age key vs the .sops.yaml anchor)
 .sops.yaml                    sops recipients + creation rules
 hosts/common/
   default.nix                 Everything both machines share: modules, user, home-manager, backup repo
@@ -184,7 +185,15 @@ global git-hook setup). The Nix tools come from the dev shell (`flake.nix` →
 - **commit-msg:** rejects AI co-author trailers, then enforces Conventional
   Commits via `scripts/commit-msg.sh` (pure bash — always runs). See below.
 - **pre-commit** → lefthook: `nixfmt` (formats staged `*.nix`, restages),
-  `deadnix --fail`, `statix check`. **pre-push** → lefthook: `nix flake check`.
+  `deadnix --fail`, `statix check`, plus `age-key` on commits touching
+  `secrets/` or `.sops.yaml`. **pre-push** → lefthook: `nix flake check`.
+- **`.sops.yaml` is the source of truth for the personal age key.** Its
+  `&sebastianstupak` anchor is the public half every secret is encrypted to,
+  and `scripts/check-age-key.sh` fails a commit when the key on this machine
+  derives to something else. The private half lives in several places by
+  design, so they can diverge — which has happened twice. When they disagree,
+  replace the key, never the anchor: the files are already encrypted to it.
+  Not a flake check, because the key lives outside the repo and the sandbox.
 - Each lefthook job is **guarded** — it no-ops (exit 0) when its tool isn't on
   PATH (e.g. a Windows checkout without Nix), so hooks never block a commit
   off-NixOS. When the tool is present, its real failure blocks the commit/push.

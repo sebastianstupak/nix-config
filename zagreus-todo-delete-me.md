@@ -24,14 +24,24 @@ Most of it is one rebuild; the rest is collecting two keys and one password.
 > zagreus was a THIRD key (`age16x0az…`) that was never a recipient of
 > anything, while `.sops.yaml` wants `age1nmnth…`. **hestia had the correct
 > key all along**, so it was copied machine-to-machine rather than pasted from
-> Proton Pass; the stale one is at `~/age-key-stale-backup.txt`. Prefer that
+> Proton Pass; the stale one is at `~/age-key-stale-backup-.txt`. Prefer that
 > route when a machine's key has drifted — it needs no password manager and
-> the public half can be compared first.
+> the public half can be compared first. `scripts/check-age-key.sh` now fails
+> any commit touching `secrets/` when the local key is not the anchor's.
 >
-> 1. **zagreus -> hestia pairing** — blocked, and not on anything in this repo:
->    hestia's Sunshine web UI password was never recorded, and that is the UI
->    the PIN must go into. `sunshine --creds` on hestia, then restart it, then
->    record it. hestia -> zagreus and apollo -> zagreus are both done.
+> 1. **zagreus -> hestia pairing** — one command, but it needs hestia's Sunshine
+>    admin password, which was never recorded and which nothing here can
+>    recover. hestia -> zagreus and apollo -> zagreus are both done and verified
+>    by `moonlight list`.
+>
+>    ```bash
+>    # set a fresh password (no old one needed), then record it per host
+>    ssh hestia.netbird.cloud 'systemctl --user stop sunshine; sunshine --creds sebastianstupak <pass>; systemctl --user start sunshine'
+>    scripts/pair-sunshine.sh hestia.netbird.cloud --name zagreus
+>    ```
+>
+>    `--creds` keeps `root.named_devices` intact, so apollo stays paired; do NOT
+>    delete `sunshine_state.json`. The restart drops any live stream.
 > 2. **lid test** (step 5) — needs a human to shut the lid; the panel here is
 >    `amdgpu_bl1`.
 > 3. **VNC** (step 6) — port 5900 listens and accepts, but nobody has completed

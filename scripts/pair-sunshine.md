@@ -51,5 +51,29 @@ so Sunshine's CSRF check skips non-browser clients). Verifies with
 - **Why a tunnel, not a direct call:** `origin_web_ui_allowed = "pc"` binds the
   Sunshine web/API to localhost, so the request must originate on the host. The
   SSH tunnel makes it appear local.
-- **Linux/NixOS clients:** the same flow works with `bash` + `curl` + `ssh`; a
-  bash port can live here too if needed.
+- **Linux/NixOS clients:** `pair-sunshine.sh`, same flow, same API calls.
+
+  ```bash
+  ./pair-sunshine.sh hestia.netbird.cloud --name zagreus
+  ```
+
+  It prompts for the password hidden on **every** run rather than caching it:
+  Linux has no DPAPI, and the obvious equivalent (an age-encrypted blob under
+  the personal key) is not worth the moving parts for a once-per-pair
+  operation. The password is handed to curl via `--config` on stdin, never
+  `-u user:pass`, which would put it in the process table for every local user
+  to read — the same reason it is not an argument or an environment variable.
+
+  Verified end to end except the authenticated half, which cannot be tested
+  without the password: the tunnel opens, the UI answers 401 through it, and a
+  wrong password is reported with the reset command rather than a curl dump.
+
+- **`Incorrect PIN` does not mean you mistyped.** Moonlight also reports it when
+  no PIN ever reached the server — including when the web UI login was rejected,
+  which is a failure on a completely different machine from the one showing the
+  error. Check the host for `-- not authorized` before re-reading digits.
+
+- **Which UI the PIN goes into:** the one on the machine being streamed FROM.
+  `localhost:47990` is a valid URL on both machines and neither page names its
+  host, so opening it inside a Moonlight window of another machine silently
+  gives you the wrong one.

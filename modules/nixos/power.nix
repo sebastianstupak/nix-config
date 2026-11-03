@@ -418,7 +418,25 @@ in
     # without dropping sessions. Verify after a switch with
     #   busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
     #     org.freedesktop.login1.Manager HandleLidSwitch
-    systemd.services.systemd-logind.reloadIfChanged = true;
+    #
+    # AND reloadIfChanged ON ITS OWN IS NOT ENOUGH — it only says HOW to apply a
+    # change, never that one happened. switch-to-configuration decides a unit
+    # needs attention by diffing the unit file and its X-Restart-Triggers, and
+    # logind.conf is neither: it is a plain `environment.etc` entry the unit has
+    # no declared relationship with. So a switch that changes ONLY logind.conf
+    # leaves the running daemon untouched and reports nothing.
+    #
+    # Caught 2026-11-03, the same bug from the other direction and after it was
+    # supposedly fixed: the switch that introduced remoteAccessRequiresAC wrote
+    # `HandleLidSwitch=suspend` to disk while logind still answered "ignore" on
+    # D-Bus, so the battery protection the whole change exists for was not live
+    # and nothing said so. Naming the file as a trigger is what closes it —
+    # combined with reloadIfChanged above, a changed logind.conf now produces a
+    # reload instead of a restart or a silent no-op.
+    systemd.services.systemd-logind = {
+      reloadIfChanged = true;
+      restartTriggers = [ config.environment.etc."systemd/logind.conf".source ];
+    };
 
     # The hibernation target. One file inside the root filesystem, so it is
     # covered by whatever encrypts root — which is the entire reason this is

@@ -121,6 +121,45 @@ chmod 600 ~/.config/sops/age/keys.txt
 sops -d secrets/common/backup.yaml >/dev/null && echo "age key works"
 ```
 
+Faster than that, and it names the expected value instead of just failing:
+
+```bash
+bash scripts/check-age-key.sh
+```
+
+### Which copy is authoritative
+
+The private half deliberately exists in several places — the Proton Pass note
+and every machine you edit secrets from. That is what makes it survivable, and
+it is also the one real hazard: **several copies of one logical key can
+silently diverge.**
+
+**`.sops.yaml` is the source of truth.** Its `&sebastianstupak` anchor is the
+public half every secret here is encrypted to; a key on disk is correct if and
+only if it derives to that value. There is no second opinion to consult, and a
+key sitting at the documented path with the documented permissions is not
+evidence of anything.
+
+So when a machine cannot decrypt, **replace the key, never the anchor.** The
+files on disk are already encrypted to the anchor. Editing the anchor to match
+a stray key requires `sops updatekeys` on every file and re-keys the repo to
+whatever that machine happens to hold — which is how you lose the escape hatch
+rather than repair it.
+
+`scripts/check-age-key.sh` enforces this, and lefthook runs it on any commit
+touching `secrets/` or `.sops.yaml`. A missing key skips (a host that never
+edits secrets does not need one, and decrypts its own at activation with its
+host key); a key that is present and *wrong* fails the commit. That is the
+case worth catching, because it is the one that looks fine:
+
+- **2026-11-01** — the anchor had drifted from the key in use, so every file was
+  encrypted to a recipient that existed nowhere. The machines never noticed;
+  only the human escape hatch was dead.
+- **2026-11-03** — zagreus held a *third* key from 2026-09-10 that was a
+  recipient of nothing. Recovered by copying hestia's working key over the
+  overlay after comparing public halves, which is usually quicker than the
+  Proton Pass route and verifiable before you overwrite anything.
+
 ### What it recovers
 
 Everything in `secrets/`, which is to say everything that matters:
@@ -147,9 +186,21 @@ it holds the encrypted files the key opens. Neither is useful alone, so:
 - **restic password, restic S3 env, netbird setup key** — all inside sops. The
   age key already recovers them; a second copy is a second thing to rotate and
   forget.
-- **Sunshine web UI password** — regenerate by deleting
-  `~/.config/sunshine/sunshine_state.json` and revisiting
-  `https://localhost:47990`, which prompts for new credentials.
+- **Sunshine web UI password** — reset it with `sunshine --creds <user> <pass>`,
+  then restart the unit so the running process reloads them.
+
+  **Do NOT delete `~/.config/sunshine/sunshine_state.json`**, which this file
+  used to recommend. Credentials are not the only thing in it: every paired
+  client lives there too, under `root.named_devices`. Deleting it silently
+  unpairs every device and each one has to be PIN-paired again, which needs
+  the web UI you were trying to get back into. `--creds` rewrites only the
+  credential fields and leaves the pairings intact.
+
+  Worth recording per host rather than relying on regeneration — hestia's was
+  not, and on 2026-11-03 that blocked pairing zagreus to it, because the PIN
+  for a pairing is entered in the web UI of the machine being streamed FROM.
+  So a forgotten password on one host blocks exactly the direction that host
+  serves.
 - **SSH key passphrase** — if lost, generate a new keypair and update
   `my.remote.authorizedKeys`. The key is a credential, not an archive.
 

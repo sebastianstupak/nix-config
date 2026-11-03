@@ -14,6 +14,31 @@ online), `docs/REMOTE.md`, `secrets/README.md` and the hades repo's
 zagreus has been offline since ~2026-10-05 and has missed everything below.
 Most of it is one rebuild; the rest is collecting two keys and one password.
 
+> **Status after the 2026-11-03 session: 9 of 13 boxes done.** The machine is
+> online, enrolled, streaming with hardware encode, and reachable by name, and
+> `sops` works here again. Nothing left is blocking; all four need a human
+> rather than a keyboard.
+>
+> The age key is worth one note, because step 1 below describes the wrong
+> recovery path for what was actually wrong. The file already present on
+> zagreus was a THIRD key (`age16x0az…`) that was never a recipient of
+> anything, while `.sops.yaml` wants `age1nmnth…`. **hestia had the correct
+> key all along**, so it was copied machine-to-machine rather than pasted from
+> Proton Pass; the stale one is at `~/age-key-stale-backup.txt`. Prefer that
+> route when a machine's key has drifted — it needs no password manager and
+> the public half can be compared first.
+>
+> 1. **zagreus -> hestia pairing** — blocked, and not on anything in this repo:
+>    hestia's Sunshine web UI password was never recorded, and that is the UI
+>    the PIN must go into. `sunshine --creds` on hestia, then restart it, then
+>    record it. hestia -> zagreus and apollo -> zagreus are both done.
+> 2. **lid test** (step 5) — needs a human to shut the lid; the panel here is
+>    `amdgpu_bl1`.
+> 3. **VNC** (step 6) — port 5900 listens and accepts, but nobody has completed
+>    a PAM-authenticated session.
+> 4. **`remoteAccess`** (step 9) — the facts are in, the decision is not. Root
+>    is ext4 with zram-only swap, so hibernation is not available as a way out.
+
 > **It is running NetBird 0.71.4, which has three HIGH advisories** —
 > local privilege escalation via an unauthenticated IPC socket, SSH-config
 > injection via a peer's hostname, and vulnerable `x/crypto/ssh` paths. Step 2
@@ -40,7 +65,7 @@ cd ~/nix-config
 sops -d secrets/common/backup.yaml >/dev/null && echo "age key works"
 ```
 
-- [ ] age key restored and verified
+- [x] age key restored and verified
 
 ## 2. Pull and switch
 
@@ -77,8 +102,8 @@ journalctl --user -u sunshine -b | grep -E "effective cap:21|Failed to gain"
 #   want: effective cap:21
 ```
 
-- [ ] switched without errors
-- [ ] rebooted, and `effective cap:21` present
+- [x] switched without errors
+- [x] rebooted, and `effective cap:21` present
 
 ## 3. NetBird — convert it to key enrolment
 
@@ -143,7 +168,7 @@ Note the unit is **`netbird.service`**, not `netbird-default.service` — see
 "Docking drops peers onto a relay" in `docs/REMOTE.md` for why, and for the
 other three things that look like causes and are not.
 
-- [ ] 0.82.0, connected, port 51821, **P2P**
+- [x] 0.82.0, connected, port 51821, **P2P**
 
 ## 4. Hand me its host key
 
@@ -157,7 +182,7 @@ Paste that back and the commented `zagreus` block in
 `hosts/common/default.nix` → `my.remote.peers` gets filled in (its addresses
 `zagreus.netbird.cloud` / `100.94.242.62` are already there).
 
-- [ ] host key collected and added to `my.remote.peers`
+- [x] host key collected and added to `my.remote.peers`
 
 ## 5. Sunshine — first-run setup
 
@@ -251,10 +276,10 @@ work here:
 journalctl --user -u sunshine -b | grep -c "drm fb for plane"   # want 0
 ```
 
-- [ ] sunshine active, credentials set, hardware encode confirmed
-- [ ] KMS monitor list shows the right display; `drm fb for plane` is 0
+- [x] sunshine active, credentials set, hardware encode confirmed
+- [x] KMS monitor list shows the right display; `drm fb for plane` is 0
 - [ ] lid closed: backlight 0, stream still good
-- [ ] at least one client paired
+- [x] at least one client paired
 
 ## 6. VNC — nothing to configure
 
@@ -278,7 +303,7 @@ ssh sebastianstupak@zagreus.netbird.cloud 'hostname; herdr session list | wc -l'
 ssh sebastianstupak@zagreus.netbird.cloud loginctl unlock-session   # unlock remotely
 ```
 
-- [ ] SSH works by name, remote unlock works
+- [x] SSH works by name, remote unlock works
 
 ## 8. Record what cannot be recovered
 

@@ -574,6 +574,72 @@ relay there by definition, so the planning assumption away from home stays
 The five-minute *lock* is deliberately untouched — walking away still secures
 the screen. The machine just stays awake behind it.
 
+### Broken IPv6 on the LAN killed Moonlight sessions for hours
+
+Diagnosed 2026-11-03 after repeated Moonlight drops that looked like NetBird or
+the Ethernet switch and were neither. **The cause was OPNsense advertising an
+IPv6 default route it could not route through.**
+
+The shape of it, because the symptom points nowhere near the cause:
+
+```
+default via fe80::2e2:69ff:fe8d:f462 dev enp1s0 proto ra metric 100
+default via fe80::2e2:69ff:fe8d:f462 dev wlp2s0 proto ra metric 600
+```
+
+A default route from Router Advertisements, and **no global IPv6 address on
+either NIC** — link-local only. So IPv6 looked usable to every application,
+and packets went nowhere. `curl -6` hung the full timeout rather than failing
+fast, which is the whole problem: anything resolving AAAA first stalled ~25s
+before falling back to IPv4.
+
+NetBird resolves AAAA for its relays and signal server, so it wore this
+constantly:
+
+```
+lookup signal.netbird.io: i/o timeout
+[relay fra1-2] failed to dial via quic: timeout: no recent network activity
+failed to dial via ws: Get "https://[2a04:3542:...]:443/relay": context deadline exceeded
+```
+
+Every failing address is an IPv6 literal. While NetBird was stuck retrying, the
+overlay degraded enough for Moonlight's keepalive to miss, and sessions died
+with `100.94.116.120: Ping Timeout` — which reads like a network problem at the
+client and is actually a stalled relay dial at the host.
+
+**Why OPNsense had nothing to advertise.** Its WAN (`igb0`) is `192.168.0.81` —
+a private address, so it is double-NATed behind another router at
+`192.168.0.1` — and it gets IPv6 there by **autoconf/SLAAC**. SLAAC hands out a
+single *address*, never a delegable *prefix*, so there was nothing to give the
+LAN. `igb1` correctly had link-local only. But `radvd` was **running with zero
+configured entries** (`{"radvd":{"entries":[]}}`), advertising a router lifetime
+and no prefix. dnsmasq had `enable_ra: 0` and Kea DHCPv6 was off, so radvd was
+the only candidate — confirmed by matching the RA source's EUI-64 MAC
+(`00:e2:69:8d:f4:62`) against `192.168.1.1`'s.
+
+**The fix:** stop `radvd` (System → Diagnostics → Services). It withdrew the
+route immediately via a final RA with lifetime 0, and `curl -6` went from
+10.007s timing out to 0.007s failing fast. NetBird's timeout errors stopped
+dead and apollo's latency settled at 4.6 ms.
+
+Two things to know:
+
+- **It was running with no config, which should not happen**, so it may come
+  back after a reboot or a configuration reload. Check with
+  `ip -6 route show default` on a client — a `proto ra` default with no global
+  IPv6 address means it is back. The service was stopped, not disabled; there
+  is no "disabled" state to set when the entry list is already empty.
+- **Do NOT fix this with `accept_ra = 0` on the clients.** It was considered and
+  rejected: these are laptops that travel, and that sysctl would break working
+  IPv6 on every other network to paper over one broken router. Fix it at the
+  router.
+
+This also corrects an earlier claim in this session that OPNsense needed no
+changes after switching zagreus to Ethernet. True of the static-port NAT rule —
+that is scoped to `LAN net` and keyed on the WireGuard source port, so a new
+LAN address changes nothing. But there *was* an OPNsense problem, pre-existing
+and affecting wifi too; the cable only added a second broken default route.
+
 ### Waking it again
 
 **ZAGREUS IS NOT HESTIA HERE, and the section above gets it wrong.** Point 3

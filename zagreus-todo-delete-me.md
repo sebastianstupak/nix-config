@@ -14,7 +14,7 @@ online), `docs/REMOTE.md`, `secrets/README.md` and the hades repo's
 zagreus has been offline since ~2026-10-05 and has missed everything below.
 Most of it is one rebuild; the rest is collecting two keys and one password.
 
-> **Status after the 2026-11-03 session: 9 of 13 boxes done.** The machine is
+> **Status after the 2026-11-03 session: 10 of 13 boxes done.** The machine is
 > online, enrolled, streaming with hardware encode, and reachable by name, and
 > `sops` works here again. Nothing left is blocking; all four need a human
 > rather than a keyboard.
@@ -50,8 +50,11 @@ Most of it is one rebuild; the rest is collecting two keys and one password.
 >    `X509Plain`, i.e. TLS-wrapped username/password, refusing unencrypted and
 >    no-auth connections. Only "does PAM take my login password" is left, which
 >    needs the password: `vncviewer zagreus.netbird.cloud:5900` from hestia.
-> 4. **`remoteAccess`** (step 9) — the facts are in, the decision is not. Root
->    is ext4 with zram-only swap, so hibernation is not available as a way out.
+> DECIDED (step 9): root is ext4 with zram-only swap, so hibernation was never
+> an option. Rather than choose between reachable and not, `my.power.remoteAccessRequiresAC`
+> now gates it on mains — awake with the lid shut while charging, normal suspend
+> on battery, which matches how these machines are actually used. Needs a switch
+> on BOTH hosts to take effect.
 
 > **It is running NetBird 0.71.4, which has three HIGH advisories** —
 > local privilege escalation via an unauthenticated IPC socket, SSH-config
@@ -349,11 +352,28 @@ Unless zagreus has an encrypted root, which hestia does not:
 lsblk -o NAME,FSTYPE,MOUNTPOINT
 ```
 
-If root is LUKS, `my.power.hibernate.enable` passes its assertion and
-`suspend-then-hibernate` becomes available — an actual answer rather than a
-trade-off. Report what it says and `remoteAccess` becomes per-host.
+**Answered 2026-11-03, and it is ext4** — `nvme0n1p2 ext4 /`, swap is zram
+only. So `my.power.hibernate.enable` fails its assertion here exactly as on
+hestia, and for a second reason the assertion does not even test: there is no
+on-disk swap to hibernate into. Hibernation was never the escape.
 
-- [ ] reported whether root is encrypted; remoteAccess decided deliberately
+The decision went a third way instead of picking a side of the trade-off.
+`my.power.remoteAccessRequiresAC = true` (set in `hosts/common`) gates
+`remoteAccess` on mains:
+
+| | lid closed | 10 min idle |
+| --- | --- | --- |
+| on charger | stays awake, reachable | stays awake |
+| on battery | suspends | suspends |
+
+which matches how these machines are used — charger in, lid shut. It reverses
+an argument `modules/nixos/power.nix` made deliberately; that argument is still
+there, next to why it no longer holds.
+
+**Takes effect only after a switch on BOTH hosts.** Until then zagreus is still
+running the never-suspend config.
+
+- [x] reported whether root is encrypted; remoteAccess decided deliberately
 
 ---
 

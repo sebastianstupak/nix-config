@@ -14,7 +14,12 @@
 # action cannot drift apart.
 #
 # See docs/POWER.md for the hibernation story and how to enable it.
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.my.power;
 in
@@ -394,11 +399,22 @@ in
     # setting nor declares an empty networking.interfaces entry.
     services.tlp.settings.WOL_DISABLE = lib.mkIf (cfg.wakeOnLan != [ ]) "N";
 
-    # NixOS's own option rather than a hand-rolled ethtool unit: it already
-    # generates one, ordered against the interface existing.
+    # NixOS's own option rather than a hand-rolled ethtool unit: it writes a
+    # systemd .link file, which systemd-udevd applies — see docs/REMOTE.md for
+    # why that works with networkd disabled.
     networking.interfaces = lib.genAttrs cfg.wakeOnLan (_: {
       wakeOnLan.enable = true;
     });
+
+    # ethtool, because WoL is otherwise UNFALSIFIABLE on this machine. The
+    # kernel exposes no sysfs attribute for the magic-packet flag — the PCI
+    # `power/wakeup` file is a different thing — so `ethtool <iface> | grep
+    # Wake-on` is the only way to read back whether any of the above worked.
+    # It is not pulled in by `networking.interfaces.*.wakeOnLan`, which needs
+    # no runtime tool, so arming WoL without this ships a feature whose state
+    # cannot be inspected. Found the obvious way: reaching for ethtool to check
+    # and discovering `command not found`.
+    environment.systemPackages = lib.mkIf (cfg.wakeOnLan != [ ]) [ pkgs.ethtool ];
 
     # AND LOGIND HAS TO BE TOLD TO RE-READ IT, or everything above is a file on
     # disk that nothing acts on.

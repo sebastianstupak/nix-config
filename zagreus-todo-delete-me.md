@@ -15,9 +15,16 @@ zagreus has been offline since ~2026-10-05 and has missed everything below.
 Most of it is one rebuild; the rest is collecting two keys and one password.
 
 > **Status after the 2026-11-03 session: 10 of 13 boxes done.** The machine is
-> online, enrolled, streaming with hardware encode, and reachable by name, and
-> `sops` works here again. Nothing left is blocking; all four need a human
-> rather than a keyboard.
+> online, enrolled, streaming with hardware encode, reachable by name, paired in
+> every direction, and `sops` works here again. Nothing left is blocking; the
+> three remaining items need a human rather than a keyboard.
+>
+> All four streaming directions are paired and verified by `moonlight list`:
+> hestia <-> zagreus, apollo -> zagreus, apollo -> hestia. zagreus -> hestia was
+> the hard one — hestia's Sunshine password was never recorded, and the PIN has
+> to go into the web UI of the machine being streamed FROM. Solved with
+> `sunshine -0`, which reads the PIN from stdin and needs no password at all;
+> see "Pairing with no password at all" in `scripts/pair-sunshine.md`.
 >
 > The age key is worth one note, because step 1 below describes the wrong
 > recovery path for what was actually wrong. The file already present on
@@ -29,27 +36,20 @@ Most of it is one rebuild; the rest is collecting two keys and one password.
 > the public half can be compared first. `scripts/check-age-key.sh` now fails
 > any commit touching `secrets/` when the local key is not the anchor's.
 >
-> 1. **zagreus -> hestia pairing** — one command, but it needs hestia's Sunshine
->    admin password, which was never recorded and which nothing here can
->    recover. hestia -> zagreus and apollo -> zagreus are both done and verified
->    by `moonlight list`.
->
->    ```bash
->    # set a fresh password (no old one needed), then record it per host
->    ssh hestia.netbird.cloud 'systemctl --user stop sunshine; sunshine --creds sebastianstupak <pass>; systemctl --user start sunshine'
->    scripts/pair-sunshine.sh hestia.netbird.cloud --name zagreus
->    ```
->
->    `--creds` keeps `root.named_devices` intact, so apollo stays paired; do NOT
->    delete `sunshine_state.json`. The restart drops any live stream.
-> 2. **lid test** (step 5) — only the lid EVENT is untested now. `brightnessctl`
+> 1. **lid test** (step 5) — only the lid EVENT is untested now. `brightnessctl`
 >    with no device resolves correctly to `amdgpu_bl1`, the only `backlight`
 >    class device, so the AMD worry is settled; shut the lid and check
 >    `cat /sys/class/backlight/*/brightness` is `0`.
-> 3. **VNC** (step 6) — the server is verified: it offers ONLY VeNCrypt
+> 2. **VNC** (step 6) — the server is verified: it offers ONLY VeNCrypt
 >    `X509Plain`, i.e. TLS-wrapped username/password, refusing unencrypted and
 >    no-auth connections. Only "does PAM take my login password" is left, which
 >    needs the password: `vncviewer zagreus.netbird.cloud:5900` from hestia.
+> 3. **nothing left unrecorded** (step 8) — still open, and it is the one with a
+>    cost attached. hestia's Sunshine password is STILL unknown: `sunshine -0`
+>    went around it rather than recovering it. zagreus's was set on 2026-11-03;
+>    record both as `<host>/sunshine-web-ui`. Nothing is blocked by this today,
+>    but it is exactly what made one pairing direction hard.
+>
 > DECIDED (step 9): root is ext4 with zram-only swap, so hibernation was never
 > an option. Rather than choose between reachable and not, `my.power.remoteAccessRequiresAC`
 > now gates it on mains — awake with the lid shut while charging, normal suspend

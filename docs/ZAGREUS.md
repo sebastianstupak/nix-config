@@ -150,8 +150,16 @@ both machines and neither page says which host it belongs to. Two consequences:
   you THAT machine's UI, not the one you are sitting at.
 - A forgotten web UI password blocks precisely the direction that host serves.
   hestia's was never recorded, so zagreus -> hestia could not be paired while
-  hestia -> zagreus went through in one go. Reset with `sunshine --creds`, not
-  by deleting the state file — see `secrets/README.md`.
+  hestia -> zagreus went through in one go.
+
+  **It is not actually a blocker**, which is worth knowing before you reset
+  anything: `sunshine -0` reads the PIN from stdin and skips the web UI and its
+  password entirely. That is how zagreus -> hestia was eventually paired, with
+  hestia's password still unknown. See "Pairing with no password at all" in
+  `scripts/pair-sunshine.md`. Prefer it over `sunshine --creds` when you do not
+  already have the password — resetting means inventing and storing one. And in
+  either case never delete `sunshine_state.json`, which would unpair every
+  client; `secrets/README.md` has why.
 
 `Incorrect PIN` from Moonlight does NOT mean you mistyped. It is also what it
 reports when no PIN ever reached the server — including when your web UI login

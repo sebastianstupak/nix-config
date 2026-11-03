@@ -16,6 +16,20 @@
   # ../../modules/nixos/netbird.nix.
   services.netbird.clients.default.port = 51821;
 
+  # THE ONE MACHINE THAT CAN BE WOKEN OVER THE WIRE, which is why this is here
+  # and not in ../common. zagreus has onboard Realtek Gigabit (`enp1s0`,
+  # `r8169`) and `/proc/acpi/wakeup` already lists it as `NIC` armed for S5;
+  # hestia has no built-in Ethernet at all, so there is nothing to arm there.
+  #
+  # This is what makes my.power.remoteAccessRequiresAC safe to have on: the
+  # machine is allowed to sleep on battery precisely because there is a way to
+  # get it back. Plugging the charger in wakes it too (the AC adapter is an
+  # armed wake source), but that needs somebody in the room.
+  #
+  # Needs a cable in the socket to do anything — see the option's description
+  # for what it has to fight (TLP disables WoL by default) and how to verify.
+  my.power.wakeOnLan = [ "enp1s0" ];
+
   # THE ONE MACHINE THAT PRUNES.
   #
   # Pruning takes an exclusive lock on the shared restic repository, so it has

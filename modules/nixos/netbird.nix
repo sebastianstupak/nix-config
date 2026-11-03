@@ -146,4 +146,56 @@ in
   # the bug report's symptom rather than its cause. This hands DNS to resolved
   # so there is one writer and one stub.
   networking.networkmanager.dns = "systemd-resolved";
+
+  # REJOIN PROPERLY AFTER RESUME, instead of coming back on a relay.
+  #
+  # Resuming is the same shape of event as docking: interfaces go down and up,
+  # so the ICE candidates the peer advertised before suspending are stale. The
+  # observed consequence of stale ICE — measured while docking, see "Docking
+  # drops peers onto a relay" in docs/REMOTE.md — is a peer sitting at
+  # `Connection type: Relayed` with `ICE candidate endpoints: -/-` for about
+  # FIFTEEN MINUTES before it recovers on its own. Reachable, but routed
+  # through a relay, which is the difference between a 20 ms desktop and an
+  # unusable one.
+  #
+  # BE CLEAR ABOUT THE EVIDENCE: the fifteen minutes is measured for docking
+  # and only inferred for resume. The mechanism is the same (an endpoint change
+  # the peer does not renegotiate), and the cost of being wrong is one extra
+  # daemon restart on a machine that just woke up, so it is worth doing before
+  # it is confirmed. If a resume is ever observed coming straight back as P2P,
+  # this can go.
+  #
+  # `try-restart`, not `restart`: a no-op when the daemon is not running (a host
+  # that has netbird disabled, or a resume during early boot) rather than an
+  # error and a failed unit in the journal.
+  #
+  # `netbird.service`, NOT `netbird-default.service` — the `default` client gets
+  # unsuffixed unit names, which is the same trap docs/REMOTE.md calls out.
+  #
+  # A named unit rather than powerManagement.resumeCommands so that it is
+  # greppable and its own success or failure shows up under its own name in
+  # `journalctl -u netbird-resume`, rather than buried in systemd-suspend's log.
+  systemd.services.netbird-resume = {
+    description = "Restart NetBird after resume so it renegotiates ICE";
+
+    # WantedBy + After on the sleep targets is the documented idiom for "run on
+    # the way back out": the unit is pulled into the suspend transaction and the
+    # ordering puts it after the target completes, which is after the machine
+    # has actually resumed.
+    wantedBy = [
+      "suspend.target"
+      "hibernate.target"
+      "suspend-then-hibernate.target"
+    ];
+    after = [
+      "suspend.target"
+      "hibernate.target"
+      "suspend-then-hibernate.target"
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.systemd}/bin/systemctl try-restart netbird.service";
+    };
+  };
 }

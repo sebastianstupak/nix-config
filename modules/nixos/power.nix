@@ -149,6 +149,57 @@ in
       '';
     };
 
+    wakeOnLan = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "enp1s0" ];
+      description = ''
+        Wired interfaces to arm for magic-packet Wake-on-LAN, so a suspended
+        machine can be woken from its own LAN. Empty disables it.
+
+        This is the other half of {option}`my.power.remoteAccessRequiresAC`:
+        that option lets the machine sleep on battery, and this is what can get
+        it back without somebody walking over to it. Plugging the charger in
+        also wakes it — the AC adapter is already an armed wake source
+        (`/sys/devices/platform/ACPI0003:00/power_supply/AC`) — but that needs a
+        person in the room, and WoL does not.
+
+        PER HOST, because it depends on hardware that differs. zagreus has
+        onboard Realtek Gigabit (`enp1s0`, `r8169`), listed in
+        `/proc/acpi/wakeup` as `NIC` and already armed for S5. hestia has no
+        built-in Ethernet at all, so there is nothing to set there; docs/REMOTE.md
+        covers the USB-dock route and why it is shakier.
+
+        WORTH KNOWING WHAT THIS HAS TO FIGHT, because both would silently undo
+        it and both are easy to miss:
+
+        - **TLP disables WoL by default.** Its shipped `defaults.conf` carries
+          `WOL_DISABLE=Y`, and nothing here overrode it — so arming the
+          interface alone would be reverted by TLP on boot and on every power
+          transition. Setting this flips `WOL_DISABLE` to `N`.
+        - **NetworkManager can re-apply its own per-connection setting** on
+          activation. Its default is to leave the device's existing
+          configuration alone, which is why nothing is set for it here — but if
+          WoL is armed and still does not survive a reconnect, that is the next
+          thing to look at (`nmcli c show <conn> | grep wake-on-lan`).
+
+        UNVERIFIED on this hardware, and honestly so: it needs root to read
+        back, a cable in the socket (`/sys/class/net/<iface>/carrier` is `0`
+        with none), and a second machine on the LAN to send the packet. Check
+        with:
+
+        ```
+        sudo ethtool enp1s0 | grep Wake-on     # want: Wake-on: g
+        # from apollo or another LAN host, with zagreus suspended:
+        wol c0:18:03:5f:6a:3d
+        ```
+
+        It only ever helps at home. A laptop on a café network has no peer on
+        its LAN to send a magic packet, so the planning assumption away from
+        home stays "asleep means unreachable".
+      '';
+    };
+
     lidBacklightOff = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -331,6 +382,23 @@ in
           # explicitly so it does not quietly follow HandleLidSwitch above.)
           HandleLidSwitchExternalPower = "suspend";
         };
+
+    # --- Wake-on-LAN --------------------------------------------------------
+    # Two settings, because arming the NIC is not enough on a machine running
+    # TLP: its defaults.conf ships WOL_DISABLE=Y, so it would strip the flag
+    # back off at boot and on every power transition. Found by reading TLP's
+    # defaults rather than by it failing, since the failure mode is a machine
+    # that simply never wakes and gives no indication why.
+    #
+    # mkIf on both so a host that sets no interfaces neither flips a TLP
+    # setting nor declares an empty networking.interfaces entry.
+    services.tlp.settings.WOL_DISABLE = lib.mkIf (cfg.wakeOnLan != [ ]) "N";
+
+    # NixOS's own option rather than a hand-rolled ethtool unit: it already
+    # generates one, ordered against the interface existing.
+    networking.interfaces = lib.genAttrs cfg.wakeOnLan (_: {
+      wakeOnLan.enable = true;
+    });
 
     # AND LOGIND HAS TO BE TOLD TO RE-READ IT, or everything above is a file on
     # disk that nothing acts on.

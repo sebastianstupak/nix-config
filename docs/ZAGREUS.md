@@ -299,11 +299,21 @@ is no on-disk space to hibernate into. There is no third option to find — the
 choice really is "awake and reachable" or "asleep and unreachable", and it has
 to be made rather than inherited.
 
-On remote wake, do not repeat the claim this file used to make. It said no mesh
-peer shares their LAN and neither machine has Ethernet; `modules/nixos/power.nix`
-was corrected away from exactly that and this file was left behind. Apollo's ICE
-endpoint is `192.168.1.223`, i.e. on hestia's LAN, and a USB-C dock adds an
-r8152 NIC that does implement magic-packet WoL. So it is **conditionally
-feasible rather than impossible** — untested, dependent on USB power surviving
-suspend, and useless away from home where there is no relay. Assume a suspended
-machine stays suspended until touched, but assume it for the right reason.
+**So the trade-off was resolved sideways rather than chosen**, 2026-11-03:
+`my.power.remoteAccessRequiresAC = true` in `hosts/common` keeps the machine
+awake and reachable with the lid shut *while charging*, and hands the lid and
+the idle timer back on battery. The stated usage is charger in, lid closed, so
+mains is the normal state and reachability costs nothing — while unplugging now
+means one thing only, that the machine is going in a bag and should sleep.
+That reverses an argument `modules/nixos/power.nix` made deliberately; the
+argument is still there, next to why it no longer applies.
+
+And on remote wake, do not repeat what this file used to say — that neither
+machine has Ethernet. **zagreus does**: onboard Realtek Gigabit `enp1s0`
+(`r8169`), listed in `/proc/acpi/wakeup` as `NIC` and already armed for S5. The
+old pessimism was hestia's situation (no onboard NIC, so a dock and its shaky
+USB power across suspend) generalised to both. `my.power.wakeOnLan = [ "enp1s0" ]`
+arms it, and apollo at `192.168.1.223` is the LAN peer that can send the packet
+— it needs a cable in the socket, and TLP had to be stopped from disabling WoL
+by default. Plugging the charger in wakes it too, with no configuration: the AC
+adapter is already an armed wake source. docs/REMOTE.md → "Waking it again".

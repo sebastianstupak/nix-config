@@ -526,9 +526,24 @@ name matters for the same reason — Hyprland otherwise increments
 machine answering while nobody is at it. It stops the two things that suspend it
 unattended: the lid, and hypridle's ten-minute idle timer.
 
-This is not optional for remote access. **A suspended machine cannot be woken**,
-and on these machines that is a dead end rather than an inconvenience worth
-engineering around. Three separate reasons, all checked on hestia:
+**Since 2026-11-03 it is gated on mains** by `my.power.remoteAccessRequiresAC`,
+which both hosts set: awake and reachable with the lid shut while charging,
+normal suspend on battery. These are laptops rather than desk servers, and the
+unconditional version flattens a carried one in a bag with no hibernation
+target to fall back on (ext4 root, zram-only swap on both). logind distinguishes
+the two natively via `HandleLidSwitchExternalPower`, and hypridle's idle timer
+is gated by the same power state with a `systemd-ac-power ||` guard, so the lid
+and the timer cannot disagree.
+
+That trade is only safe because a sleeping machine can now come back — see
+"Waking it again" below.
+
+Everything from here to that section was written when suspending WAS a dead
+end. It is kept because the reasoning is still right about hestia, and because
+the correction is instructive: the conclusion was generalised from one machine
+to both.
+
+Three separate reasons, **all checked on hestia**:
 
 1. **Wake-on-LAN is a Layer-2 broadcast and the overlay is Layer 3.** The two
    ends of a WireGuard tunnel sit in unconnected broadcast domains, so a magic
@@ -553,11 +568,78 @@ WoL, and USB power maintained across suspend — which is the shaky link, since
 docks commonly drop the device in S3/s2idle. Untested.
 
 And it only ever helps at home. A laptop on café and hotel networks has no
-relay there by definition, so the planning assumption stays "awake or
-unreachable" — just not because a relay is unobtainable.
+relay there by definition, so the planning assumption away from home stays
+"asleep means unreachable" — just not because a relay is unobtainable.
 
 The five-minute *lock* is deliberately untouched — walking away still secures
 the screen. The machine just stays awake behind it.
+
+### Waking it again
+
+**ZAGREUS IS NOT HESTIA HERE, and the section above gets it wrong.** Point 3
+is about hestia's missing onboard Ethernet, and the conclusion drawn from it —
+"conditionally feasible", needs a dock, "the shaky link is USB power across
+suspend" — was generalised to both machines. None of it applies to zagreus:
+
+```
+enp1s0   Realtek RTL8111/8168   driver r8169   c0:18:03:5f:6a:3d
+/proc/acpi/wakeup:   NIC   S5   *enabled
+```
+
+Onboard Gigabit, already an armed ACPI wake source for S5. No dock, so no USB
+power question. `my.power.wakeOnLan = [ "enp1s0" ]` in `hosts/zagreus/` arms it
+for magic packets, and apollo at `192.168.1.223` is the LAN peer that can send
+one. Needs a cable in the socket — `/sys/class/net/enp1s0/carrier` is `0`
+without one, and then WoL does nothing.
+
+**Two things would have silently undone it**, and both were found by reading
+rather than by failure:
+
+- **TLP disables WoL by default.** Its `defaults.conf` ships `WOL_DISABLE=Y`
+  and nothing overrode it, so arming the interface alone would be stripped back
+  off at boot and on every power transition. `my.power.wakeOnLan` sets
+  `WOL_DISABLE=N` alongside arming the link, which is why it is one option and
+  not two settings to remember.
+- **The mechanism is a `.link` file, not a service.** NixOS writes
+  `/etc/systemd/network/40-enp1s0.link` with `WakeOnLan=magic`. That looks like
+  it needs systemd-networkd, which is **disabled** here in favour of
+  NetworkManager — but `.link` files are applied by **systemd-udevd**, via
+  `80-net-setup-link.rules` → `IMPORT{builtin}="net_setup_link"`, on every net
+  device add. So it works without networkd. Verified by reading the rule, since
+  the failure mode would be a machine that simply never wakes.
+
+NetworkManager can re-apply its own per-connection `wake-on-lan` on activation;
+its default leaves the device alone, so nothing is configured for it. If WoL is
+armed and still does not survive a reconnect, check
+`nmcli c show <conn> | grep wake-on-lan`.
+
+**Plugging the charger in also wakes it**, and that needs no configuration at
+all: the AC adapter is already an armed wake source
+(`/sys/devices/platform/ACPI0003:00/power_supply/AC` reads `enabled`), as is the
+lid switch (`PNP0C0D`). Whether the firmware actually emits the event on
+plug-in is vendor-specific and **untested** — suspend on battery, plug in, see
+if it comes back.
+
+Once it is awake on mains with the lid still shut, nothing re-suspends it:
+logind acts on lid *events* rather than lid state, so an already-closed lid
+generates nothing new, and the idle guard short-circuits on AC.
+
+**Awake is not the same as reachable.** `netbird-resume.service`
+(`modules/nixos/netbird.nix`) does `systemctl try-restart netbird.service` on
+the way out of every sleep target, because resume invalidates the ICE
+candidates the peer advertised before suspending — the same mechanism as
+"Docking drops peers onto a relay" above, where a stale peer sat `Relayed` with
+`-/-` endpoints for about fifteen minutes. Note the evidence: that duration is
+**measured for docking and inferred for resume**. If a resume is ever seen
+coming straight back as P2P, the unit can go.
+
+Verify, with root and a cable:
+
+```bash
+sudo ethtool enp1s0 | grep Wake-on          # want: Wake-on: g
+# then from apollo, with zagreus suspended:
+wol c0:18:03:5f:6a:3d
+```
 
 **Verify it actually took effect**, because the file saying so is not enough:
 

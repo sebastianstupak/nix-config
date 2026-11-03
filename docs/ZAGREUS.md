@@ -212,7 +212,32 @@ sudo iptables -S nixos-fw |
 
 # the lid, post-switch
 grep ^RUNTIME_PM_ON_AC /etc/tlp.conf            # auto
+
+# THE LID, as logind actually has it — NOT as /etc says. The file has lied in
+# both directions; the running daemon is the only honest answer. See the
+# restartTrigger comment in modules/nixos/power.nix for why.
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager HandleLidSwitch              # want: suspend
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager HandleLidSwitchExternalPower # want: ignore
 ```
+
+**VNC**, which is worth checking separately because wayvnc's own config is easy
+to believe without evidence. Probe what the server actually offers rather than
+trusting the module: it should advertise exactly one security type, VeNCrypt
+**`X509Plain`** (262) — X.509 TLS wrapping username/password, which is to say
+TLS on, PAM auth on, and unencrypted or no-auth connections refused. Anything
+more in that list means something is weaker than intended.
+
+```bash
+ss -ltn | grep 5900                              # listening
+vncviewer zagreus.netbird.cloud:5900             # from hestia; TigerVNC
+```
+
+The credential is your **normal login password** — wayvnc authenticates through
+PAM, so there is no separate VNC password to set or lose. Use TigerVNC
+specifically for the hardware-encoded path (OpenH264 extension); other viewers
+fall back to software Tight.
 
 **On hardware encode, do not grep for VA-API here.** The natural check —
 `vainfo | grep -c VAEntrypointEncSlice` and a `va_openDriver() returns 0` line
@@ -282,6 +307,26 @@ bearing rather than belt-and-braces: kmsgrab needs it.
   rather than the device name — the generated config has
   `bindl=, switch:on:Lid Switch, exec, brightnessctl -s set 0` and a matching
   `switch:off` that restores with `-r`.
+
+## Still unverified as of 2026-11-03
+
+zagreus is online, enrolled, paired in all four streaming directions and
+reachable by name. Three things were never finished, all because they need a
+person rather than a command, and this is where they live now that the
+throwaway catch-up checklist is gone:
+
+1. **The lid event.** The device half is settled (see above); nobody has
+   actually shut the lid and confirmed the backlight goes to `0` and a stream
+   survives.
+2. **A real VNC login.** The server's configuration is verified by probe
+   (`X509Plain` only); no PAM-authenticated session has been completed, which
+   needs the login password.
+3. **Secrets not recorded** — the one with a cost attached. **hestia's Sunshine
+   admin password is still unknown**: `sunshine -0` went around it rather than
+   recovering it, so the next thing needing hestia's web UI will hit the same
+   wall. zagreus's was set on 2026-11-03. Record both as
+   `<host>/sunshine-web-ui` per §5; an unrecorded one is exactly what made the
+   zagreus -> hestia pairing hard.
 
 ## One decision to make rather than inherit
 

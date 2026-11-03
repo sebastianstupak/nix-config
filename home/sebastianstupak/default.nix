@@ -100,13 +100,18 @@
   # How the switch is enforced, and why it is a PATH wrapper rather than a
   # direnv .envrc: modules/home/claude-code-profiles.nix.
   my.claude.profiles.nettify = {
-    # Set this to the address `/status` reports after the first login in that
-    # tree. Until it is set, any account is accepted there — there is nothing to
-    # compare against before a login has happened. Once set, `claude` refuses to
-    # start under ~/dev/nettify signed in as anyone else, which is what stops
-    # that work from quietly landing on the personal subscription (or the
-    # reverse).
-    # account = "sebastian.stupak@nettify.example";
+    # The address `/status` reports in that tree. While this was unset, any
+    # account was accepted there — there is nothing to compare against before a
+    # login has happened, so the wrapper routed by directory but refused
+    # nothing. Set, `claude` refuses to start under ~/dev/nettify signed in as
+    # anyone else, which is what stops that work from quietly landing on the
+    # personal subscription (or the reverse).
+    #
+    # The tree's own agent harness checks this independently (its account-lock
+    # hook reads the signed-in address out of the profile's own state), so the
+    # two are deliberately redundant: the hook catches a mis-login inside a
+    # session, this refuses to start one at all.
+    account = "sebastian.ai@nettify.com";
 
     # Work-only MCP servers. They live in this profile's own .claude.json, so
     # Linear is reachable from every repo under ~/dev/nettify and from nowhere
@@ -117,30 +122,18 @@
       url = "https://mcp.linear.app/mcp";
     };
 
-    # Seeds ~/dev/nettify/CLAUDE.md on the next activation, and only if that
-    # file does not exist yet — it stays a normal writable file afterwards, so
-    # both hand edits and Claude Code's `#` memory shortcut keep working. It
-    # sits at the top of the tree, so every repo below inherits it.
-    instructions = ''
-      # Nettify
-
-      Everything under `~/dev/nettify` runs on the nettify Claude account: its own
-      login and subscription, its own MCP servers, its own history. That is
-      enforced by the `claude` wrapper on PATH, not by convention — see
-      `my.claude.profiles.nettify` in the personal nix-config.
-
-      ## Boundaries
-
-      - Nettify code, tickets and credentials stay inside this tree.
-      - Do not read from or copy into repositories outside it.
-      - Linear is the tracker for this org and is available here via MCP. Prefer
-        it over guessing at ticket state.
-
-      ## Conventions
-
-      Fill these in as they become clear — build/test commands, review rules,
-      deploy steps, whatever turns out to be the thing you explain twice.
-    '';
+    # No `instructions`. ~/dev/nettify is now a git checkout of
+    # github.com/sebastianstupak/nettify-rules, which tracks that CLAUDE.md
+    # itself — along with the tree's hooks, shared skills and bootstrap. Seeding
+    # from here would give one path two owners: activation only writes the file
+    # when it is absent, so the tracked version wins in practice, but a checkout
+    # that had not happened yet (or a deleted file) would silently get the stale
+    # nix copy back and shadow the real rules.
+    #
+    # The Boundaries section that used to live here moved into that repo's
+    # CLAUDE.md verbatim, so nothing was lost. Edit the rules there and commit
+    # them; this module keeps only what the repo cannot know — which account and
+    # which MCP servers the profile gets.
   };
 
   # The orgs this machine is used for. Directory is the boundary: anything under

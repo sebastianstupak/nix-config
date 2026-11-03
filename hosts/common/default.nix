@@ -130,15 +130,28 @@
   # Stay reachable: no suspend on lid close, no suspend on idle. This is the
   # half of my.remote that lives in the power module, because a suspended
   # machine cannot be woken over an overlay network — see my.power.remoteAccess
-  # for what it costs (a laptop that will flatten itself if left closed in a
-  # bag) and docs/POWER.md.
+  # and docs/POWER.md.
   my.power.remoteAccess = true;
 
-  # Because remoteAccess means the lid no longer does ANYTHING — measured, not
-  # assumed: a 32-second lid close changed nothing, down to the backlight
-  # sitting at full brightness lighting the inside of a shut lid. This turns the
-  # lamp off and deliberately leaves the output scanning out, so KMS capture
-  # keeps working with the lid down. See my.power.lidBacklightOff.
+  # BUT ONLY ON MAINS, which is the difference between reachable and ruined.
+  # These are laptops, not desk servers: the stated use is charger in and lid
+  # closed, so mains is the normal state and reachability costs nothing — while
+  # unplugging means the machine is going in a bag, where `remoteAccess` on its
+  # own would run the battery flat with no hibernation target to fall back on
+  # (ext4 root, zram-only swap on both hosts).
+  #
+  # This deliberately makes reachability depend on the charger being in, which
+  # modules/nixos/power.nix once argued against. That argument is preserved
+  # there alongside why it no longer applies. Turn this OFF for a host that must
+  # stay reachable regardless of a power cable somebody might unplug.
+  my.power.remoteAccessRequiresAC = true;
+
+  # The lid still blanks the panel in every case, including the mains case where
+  # it no longer suspends — measured, not assumed: a 32-second lid close changed
+  # nothing, down to the backlight sitting at full brightness lighting the inside
+  # of a shut lid. This turns the lamp off and deliberately leaves the output
+  # scanning out, so KMS capture keeps working with the lid down. See
+  # my.power.lidBacklightOff.
   my.power.lidBacklightOff = true;
 
   # Backups. One shared restic repository for every machine here — restic

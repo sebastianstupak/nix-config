@@ -776,13 +776,23 @@ in
         # A tooltip is UI for a decision, so a false one is worse than none.
         # Conditioning it on the same option that drives hypridle is what keeps
         # the promise the old comment here only asked for.
+        #
+        # THREE cases now, because my.power.remoteAccessRequiresAC makes the
+        # answer depend on the power state — and a tooltip cannot read that, so
+        # it must say so rather than pick whichever half is true right now.
+        # Claiming "does NOT suspend" on a machine that suspends the moment you
+        # unplug it would be the same class of lie this comment was written for.
         tooltip-format-deactivated =
-          if osConfig.my.power.remoteAccess then
+          if osConfig.my.power.remoteAccess && osConfig.my.power.remoteAccessRequiresAC then
+            "󰒲 Locks after 5 min idle\nOn mains: stays awake, SSH and Sunshine keep working.\nOn battery: suspends after 10 min, and the lid suspends too.\n\nClick to stop it locking."
+          else if osConfig.my.power.remoteAccess then
             "󰒲 Screen will LOCK\nLocks after 5 min idle. Does NOT sleep or suspend —\nSSH and Sunshine keep working behind the lock screen.\n\nClick to stop it locking."
           else
             "󰒲 Screen WILL sleep\nLocks after 5 min idle, suspends after 10.\n\nClick to keep it awake.";
         tooltip-format-activated =
-          if osConfig.my.power.remoteAccess then
+          if osConfig.my.power.remoteAccess && osConfig.my.power.remoteAccessRequiresAC then
+            "󰅶 Screen is being kept UNLOCKED\nNo lock, however long you idle.\nOn battery the machine can still suspend; the lid still works.\n\nClick to let it lock again."
+          else if osConfig.my.power.remoteAccess then
             "󰅶 Screen is being kept UNLOCKED\nNo lock, however long you idle.\n\nClick to let it lock again."
           else
             "󰅶 Screen is being kept AWAKE\nNo lock, no suspend, however long you idle.\n\nClick to let it sleep again.";

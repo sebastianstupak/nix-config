@@ -105,6 +105,47 @@ in
         link is USB power across suspend. Untested, and useless away from home
         where there is no relay at all — so a suspended machine should still be
         assumed to stay suspended until somebody touches it. docs/REMOTE.md.
+
+        See {option}`my.power.remoteAccessRequiresAC` for the middle ground,
+        which is what both hosts actually use.
+      '';
+    };
+
+    remoteAccessRequiresAC = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Make {option}`my.power.remoteAccess` apply **only while on mains**: stay
+        awake with the lid shut when the charger is in, suspend normally on
+        battery.
+
+        This exists because the unconditional version has a real cost and the
+        machines are not used the way it assumes. zagreus is the laptop that
+        gets carried, and with `remoteAccess` on and nothing to hibernate into
+        (plain ext4 root, zram-only swap) a closed lid in a bag runs the battery
+        flat — no session lost, but you arrive with a dead laptop.
+
+        THIS REVERSES A DELIBERATE DECISION, so the original reasoning is kept
+        rather than deleted. The config used to set both `HandleLidSwitch` and
+        `HandleLidSwitchExternalPower` to `ignore` on purpose, arguing that a
+        lid which suspends on battery "would make reachability depend on whether
+        the charger happened to be in". That is true, and it is now the point:
+        the stated usage is charger in, lid closed, permanently. Reachability
+        depending on mains is a condition being chosen, not an accident — and
+        when the charger is out, the machine is in a bag and being unreachable
+        is what you want.
+
+        Set it per host. A machine genuinely used as a desk server, where
+        reachability must not depend on a power cable somebody might trip over,
+        should leave this off and accept the battery cost.
+
+        Covers both suspend paths, not just the lid:
+        - the lid, via logind's native `HandleLidSwitchExternalPower`
+        - hypridle's idle timer, which gets the listener back with its command
+          guarded by `systemd-ac-power` so it fires only on battery
+          (modules/home/hyprland.nix)
+
+        The 5-minute lock is untouched either way, as under `remoteAccess`.
       '';
     };
 
@@ -248,20 +289,42 @@ in
     # delay DISABLES that path and replaces it with periodic timed wakeups,
     # which both drains more and hibernates on a clock rather than on need.
     #
-    # my.power.remoteAccess overrides BOTH of these to "ignore" rather than
-    # just the on-battery one. Closing the lid of a machine you intend to
+    # THREE states, not two, and the middle one is what both hosts use.
+    #
+    # my.power.remoteAccess alone overrides BOTH of these to "ignore". The
+    # original argument for that: closing the lid of a machine you intend to
     # connect to is a normal thing to do — it is how a laptop sits on a desk
     # when it is being used as a server — and a lid that suspends on battery
     # would make reachability depend on whether the charger happened to be in.
+    #
+    # That reasoning is sound and was the wrong trade for these machines. The
+    # dependency it warns about is now deliberate: see
+    # my.power.remoteAccessRequiresAC, which keeps reachability on mains and
+    # hands the lid back on battery, because a carried laptop with no
+    # hibernation target otherwise flattens itself in a bag.
     services.logind.settings.Login =
-      if cfg.remoteAccess then
+      let
+        # Nothing to hibernate into on either host today (ext4 root, zram-only
+        # swap), so this resolves to plain "suspend" — but keep it derived so
+        # enabling hibernation fixes the lid everywhere at once.
+        onBattery = if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend";
+      in
+      if cfg.remoteAccess && !cfg.remoteAccessRequiresAC then
         {
           HandleLidSwitch = "ignore";
           HandleLidSwitchExternalPower = "ignore";
         }
+      else if cfg.remoteAccess then
+        {
+          # The whole point: reachable with the lid shut while plugged in,
+          # asleep in a bag. systemd distinguishes these natively, so this needs
+          # no polling and no script — the kernel's power-supply state decides.
+          HandleLidSwitch = onBattery;
+          HandleLidSwitchExternalPower = "ignore";
+        }
       else
         {
-          HandleLidSwitch = if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend";
+          HandleLidSwitch = onBattery;
 
           # On AC, closing the lid should not start a countdown to hibernation —
           # the battery is not the constraint. (systemd's own default, set

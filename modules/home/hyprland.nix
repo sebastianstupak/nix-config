@@ -341,7 +341,7 @@
           on-timeout = "hyprlock";
         }
       ]
-      ++ lib.optional (!osConfig.my.power.remoteAccess) {
+      ++ lib.optional (!osConfig.my.power.remoteAccess || osConfig.my.power.remoteAccessRequiresAC) {
         timeout = 600; # sleep after 10 min idle
         # suspend-then-hibernate once there is a swapfile to hibernate into
         # (my.power.hibernate.enable, modules/nixos/power.nix). Plain suspend
@@ -350,11 +350,34 @@
         # is here to fix, and it is pointless to fix the lid but not the
         # idle timeout. before_sleep_cmd above locks the session either way,
         # so resuming lands on hyprlock rather than in the session.
+        #
+        # Under my.power.remoteAccessRequiresAC the listener comes BACK but
+        # its command is gated: `systemd-ac-power` exits 0 on mains, so the
+        # `||` makes this a no-op while plugged in and a real suspend on
+        # battery. It has to be a guard inside the command rather than a
+        # conditional listener, because hypridle evaluates its config once
+        # at start and the power state changes while it runs — unplugging
+        # must take effect without restarting the daemon.
+        #
+        # systemd-ac-power ships with systemd and reads the same power-supply
+        # state logind uses for HandleLidSwitchExternalPower, so the lid and the
+        # idle timer cannot disagree about whether the machine is on mains.
+        #
+        # Absolute path, for the same reason unlock_cmd above is absolute: this
+        # runs through a shell whose PATH is the user unit's. `systemctl` does
+        # resolve there, but a guard that silently failed to execute would exit
+        # non-zero and suspend a plugged-in machine — breaking the reachability
+        # this option exists to keep, with nothing in the log to explain it.
         on-timeout =
-          if osConfig.my.power.hibernate.enable then
-            "systemctl suspend-then-hibernate"
-          else
-            "systemctl suspend";
+          let
+            sleepCmd =
+              if osConfig.my.power.hibernate.enable then
+                "systemctl suspend-then-hibernate"
+              else
+                "systemctl suspend";
+            acPower = "${pkgs.systemd}/bin/systemd-ac-power";
+          in
+          if osConfig.my.power.remoteAccessRequiresAC then "${acPower} || ${sleepCmd}" else sleepCmd;
       };
     };
   };

@@ -607,33 +607,48 @@ overlay degraded enough for Moonlight's keepalive to miss, and sessions died
 with `100.94.116.120: Ping Timeout` — which reads like a network problem at the
 client and is actually a stalled relay dial at the host.
 
-**Why OPNsense had nothing to advertise.** Its WAN (`igb0`) is `192.168.0.81` —
-a private address, so it is double-NATed behind another router at
-`192.168.0.1` — and it gets IPv6 there by **autoconf/SLAAC**. SLAAC hands out a
-single *address*, never a delegable *prefix*, so there was nothing to give the
-LAN. `igb1` correctly had link-local only. But `radvd` was **running with zero
-configured entries** (`{"radvd":{"entries":[]}}`), advertising a router lifetime
-and no prefix. dnsmasq had `enable_ra: 0` and Kea DHCPv6 was off, so radvd was
-the only candidate — confirmed by matching the RA source's EUI-64 MAC
-(`00:e2:69:8d:f4:62`) against `192.168.1.1`'s.
+**Why radvd was running at all**, which is the part that matters, because
+`{"radvd":{"entries":[]}}` makes it look as though nothing should be:
 
-**The fix:** stop `radvd` (System → Diagnostics → Services). It withdrew the
-route immediately via a final RA with lifetime 0, and `curl -6` went from
-10.007s timing out to 0.007s failing fast. NetBird's timeout errors stopped
-dead and apollo's latency settled at 4.6 ms.
+```
+Interfaces -> LAN -> IPv6 Configuration Type = Track Interface (legacy)
+                     track6-interface        = WAN
+```
 
-Two things to know:
+`track6` declares "this LAN receives a delegated prefix from WAN, so be its
+IPv6 router", and THAT is what registers and starts radvd — independently of
+the Router Advertisements page having any entries. Meanwhile WAN (`igb0`) is
+`192.168.0.81`, a **private** address, so OPNsense is double-NATed behind
+another router at `192.168.0.1`, and it gets IPv6 there by **autoconf/SLAAC**.
+SLAAC yields a single *address*, never a delegable *prefix*. So there was
+nothing to track and nothing to advertise: radvd started because of `track6`,
+found no prefix, and emitted a bare router lifetime.
 
-- **It was running with no config, which should not happen**, so it may come
-  back after a reboot or a configuration reload. Check with
-  `ip -6 route show default` on a client — a `proto ra` default with no global
-  IPv6 address means it is back. The service was stopped, not disabled; there
-  is no "disabled" state to set when the entry list is already empty.
+dnsmasq had `enable_ra: 0` and Kea DHCPv6 was off, so radvd was the only
+candidate — confirmed by decoding the RA source's EUI-64 back to
+`00:e2:69:8d:f4:62` and matching it to `192.168.1.1`.
+
+**The fix, and it is persistent:** set LAN's IPv6 Configuration Type to
+**None** (Interfaces -> LAN -> Save -> Apply changes). Nothing is lost, since
+the LAN had no global IPv6 to begin with; reverse it the day WAN actually gets
+DHCPv6-PD instead of autoconf.
+
+How to tell it is properly fixed rather than merely stopped: **radvd disappears
+from the service list entirely.** Stopping the service leaves it listed with
+`running=0`, from where a reboot or a reconfigure can start it again. With
+`type6 = None` it is no longer a registered service for this configuration, so
+there is nothing left to start.
+
+Measured, before -> after: `curl -6` 10.007s timing out -> 0.007s failing fast;
+NetBird's relay and signal timeout errors continuous -> zero; apollo's latency
+33 ms -> 4.6 ms. IPv4 untouched throughout (LAN stayed `192.168.1.1/24`, Static
+IPv4), and dnsmasq and unbound were never restarted, so DNS and DHCPv4 did not
+blink.
+
 - **Do NOT fix this with `accept_ra = 0` on the clients.** It was considered and
   rejected: these are laptops that travel, and that sysctl would break working
   IPv6 on every other network to paper over one broken router. Fix it at the
   router.
-
 This also corrects an earlier claim in this session that OPNsense needed no
 changes after switching zagreus to Ethernet. True of the static-port NAT rule —
 that is scoped to `LAN net` and keyed on the WireGuard source port, so a new

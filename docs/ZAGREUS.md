@@ -260,12 +260,20 @@ bearing rather than belt-and-braces: kmsgrab needs it.
 - **`output_name = "eDP-1"`** via `my.remote.output` is **correct here**, not a
   lucky guess with one display: `Mapped 'eDP-1' to kmsgrab monitor index 0`.
   Still make it per-host if a third machine's panel is named differently.
-- **The lid bind calls `brightnessctl` without naming a device.** On hestia that
-  resolves to `intel_backlight`; here the panel is `amdgpu_bl1` (note `bl1`, not
-  `bl0`). It should pick it automatically — **still unconfirmed**, because it
-  needs someone to physically close the lid. Verify with
+- **The lid bind calls `brightnessctl` without naming a device**, and that part
+  is **fine on AMD**: `brightnessctl info` with no argument resolves to
+  `amdgpu_bl1` (note `bl1`, not `bl0`), and it is the only device of class
+  `backlight` — the others are `leds`, a different class, so there is nothing
+  to pick wrongly. On hestia the same call lands on `intel_backlight`.
+
+  What remains untested is only whether the **lid switch event itself** fires:
+  that needs someone to physically shut the lid, and `my.power.remoteAccess`
+  means nothing else about a closed lid is observable. Check with
   `cat /sys/class/backlight/*/brightness` (want `0`), reopening to restore. If
-  it never fires, suspect the `switch:on:Lid Switch` polarity.
+  the backlight does not go out, suspect the `switch:on:Lid Switch` polarity
+  rather than the device name — the generated config has
+  `bindl=, switch:on:Lid Switch, exec, brightnessctl -s set 0` and a matching
+  `switch:off` that restores with `-r`.
 
 ## One decision to make rather than inherit
 

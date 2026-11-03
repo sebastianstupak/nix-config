@@ -42,10 +42,14 @@ Most of it is one rebuild; the rest is collecting two keys and one password.
 >
 >    `--creds` keeps `root.named_devices` intact, so apollo stays paired; do NOT
 >    delete `sunshine_state.json`. The restart drops any live stream.
-> 2. **lid test** (step 5) — needs a human to shut the lid; the panel here is
->    `amdgpu_bl1`.
-> 3. **VNC** (step 6) — port 5900 listens and accepts, but nobody has completed
->    a PAM-authenticated session.
+> 2. **lid test** (step 5) — only the lid EVENT is untested now. `brightnessctl`
+>    with no device resolves correctly to `amdgpu_bl1`, the only `backlight`
+>    class device, so the AMD worry is settled; shut the lid and check
+>    `cat /sys/class/backlight/*/brightness` is `0`.
+> 3. **VNC** (step 6) — the server is verified: it offers ONLY VeNCrypt
+>    `X509Plain`, i.e. TLS-wrapped username/password, refusing unencrypted and
+>    no-auth connections. Only "does PAM take my login password" is left, which
+>    needs the password: `vncviewer zagreus.netbird.cloud:5900` from hestia.
 > 4. **`remoteAccess`** (step 9) — the facts are in, the decision is not. Root
 >    is ext4 with zram-only swap, so hibernation is not available as a way out.
 

@@ -817,6 +817,39 @@ device lists simply default to empty, so this was one setting away the whole
 time. The module comment carries the full reasoning and the failsafe that keeps
 it safe on a travelling laptop.
 
+**The controlled comparison, which is the best evidence here.** One machine,
+one moment, two peers on the same LAN, and the only difference is which of the
+two local addresses ICE happened to settle on:
+
+```
+zagreus -> hestia   local .241 (ethernet, MATCHES the route)   host/host    SwitchToRelay:  1
+zagreus -> apollo   local .191 (wifi, CONTRADICTS the route)   host/prflx   SwitchToRelay: 15
+```
+
+The pair whose local candidate agrees with the egress path is stable; the one
+pinned to the wifi address churns fifteen times. Same dual-homing underneath
+both. This is also why hestia looked fine while Moonlight did not: nothing
+protects a given peer from landing on the wrong address, it is luck, and the
+streaming peer lost.
+
+**What this model does NOT explain, recorded so it is not mistaken for
+settled:** `forge` is genuinely remote, shows a clean `host/srflx` on `.241`,
+and has **84** relay switches — the worst of any peer. So ICE churn plainly has
+causes beyond local addressing. It does not touch Moonlight (forge carries no
+stream) and it is not a reason to doubt the comparison above, but anyone
+re-reading this during the next outage should know the explanation is partial.
+
+**Away from home nothing changes.** The fix is about this machine holding one
+address per subnet, not about where the client is, and it is equally correct
+with the client on the far side of the internet. The ports stay open on `wt0`
+only, which is already the remote configuration — no second Moonlight host
+entry, no per-location switching. Expect `srflx/srflx` or a relay instead of
+`host/host`, real latency, and renegotiations driven by the path rather than by
+local addressing; `ping_timeout = 60000` is worth more there, not less. The one
+gateway item that matters for a remote client is the static-port outbound NAT
+rule for `51821`, which is already in place (see "Docking drops peers onto a
+relay" for why static-port and per-host ports are load-bearing).
+
 **Verify it worked** — not from the absence of complaints, which is how two
 wrong diagnoses survived this long:
 

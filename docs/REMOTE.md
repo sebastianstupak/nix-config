@@ -727,7 +727,25 @@ cause, both make it worse:
 **What is fixed in this repo:** `ping_timeout = 60000` in
 `modules/nixos/remote.nix`, covering the worst gap measured. That is
 symptomatic on purpose — a renegotiation the protocols recover from by
-themselves should cost a stutter, not the session.
+themselves should cost a stutter, not the session. Note the margin: 60 s
+against a 56 s worst case, so a longer-than-usual renegotiation will still end
+a session. The symptom to expect now is a freeze that recovers, not a drop.
+
+**A switch does not apply it — Sunshine is a USER unit.**
+`switch-to-configuration` rewrites `/etc/systemd/user/sunshine.service` to
+point at the new config, and leaves the running process alone; NixOS restarts
+system units, not user ones. Demonstrated on zagreus: Sunshine ran unbroken
+from 2026-11-03 00:10:34 across four switches that same night (generations
+29-32), holding its original config the whole time. So:
+
+```bash
+sudo nixos-rebuild switch --flake .#zagreus
+systemctl --user restart sunshine    # kills any live stream — do it before connecting
+systemctl --user show sunshine -p ExecStart --value   # want the NEW sunshine.conf hash
+```
+
+The same trap applies to every `services.sunshine.settings` change, which is
+why it is here and not in a commit message.
 
 **What is left, in order:**
 

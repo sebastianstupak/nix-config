@@ -145,9 +145,17 @@ an earlier guess here got wrong. `services.netbird.clients.<key>` has its own
   Never use ping as a health check against the Windows peer.
 
 **To stop it recurring**, don't keep two default routes on one subnet: have
-NetworkManager drop wifi while Ethernet is up, or raise wifi's metric so it is
-unambiguously standby. Not yet implemented — the one-liner above is the current
-answer.
+NetworkManager drop wifi while Ethernet is up. **Now implemented** in
+`modules/nixos/laptop.nix`, so the `netbird down && netbird up` above is a
+recovery command rather than the standing answer.
+
+That took much longer than it should have, because this section treats the
+symptom as "already-negotiated ICE paths break on an address change" — true,
+self-healing, and therefore easy to file as a curiosity. It is not the whole
+story. Two addresses on one subnet break ICE **continuously**, not just at the
+moment the second one appears, and that is what was killing Moonlight for
+days. See "Moonlight drops: two addresses on one subnet made ICE run on
+guesses" below for the mechanism and the three commands that show it.
 
 ## The firewall trusts the whole overlay — Netbird's policy is the real control
 
@@ -655,7 +663,7 @@ that is scoped to `LAN net` and keyed on the WireGuard source port, so a new
 LAN address changes nothing. But there *was* an OPNsense problem, pre-existing
 and affecting wifi too; the cable only added a second broken default route.
 
-### Moonlight drops are NetBird path churn, and the IPv6 fix did not end them
+### Moonlight drops: two addresses on one subnet made ICE run on guesses
 
 The section above was necessary and is not sufficient. IPv6 is genuinely fixed
 — `curl -6` fails in milliseconds, NetBird's relay dials to IPv6 literals now
@@ -687,7 +695,8 @@ journalctl -u netbird --since today | grep "Dump stat" | tail -3
 per day across all peers. Each one is a chance to lose a session, which is why
 this reads as "Moonlight disconnects a lot" rather than as a single fault.
 
-**The trigger, and it is on a clock.** The Management stream dies every ~21
+**A trigger that looked compelling and is not the cause — read the next
+subsection before acting on this one.** The Management stream dies every ~21
 minutes, all day, 154 times since this boot:
 
 ```bash
@@ -702,27 +711,36 @@ machine is the churning side, not the Windows box — and each re-handshake drop
 to relay first and re-gathers ICE second. The relay-fallback clusters line up
 with that 21-minute cadence to within a minute or two.
 
-A keepalive ping that gets no ACK is a path problem, not a NetBird bug: gRPC
-sends its own keepalives, so the flow is never idle, and something in front of
-it is still dropping the TCP state. The source address in the reconnect errors
-is `192.168.1.241` — the **Ethernet** address — so this is not the wifi. Next
-place to look is a state/connection lifetime on OPNsense, or on the router it
-is double-NATed behind (see the WAN-is-`192.168.0.81` note above).
+**This is normal NetBird behaviour. Do not take it to the gateway.** The
+reasoning that sent this toward OPNsense was: gRPC sends its own keepalives, so
+the flow is never idle, so a middlebox must be dropping the state. Plausible,
+and wrong. One command settled it:
 
-**Two aggravating factors, both already documented above.** Neither is the
-cause, both make it worse:
+```bash
+ssh hestia journalctl -u netbird --since "6 hours ago" \
+  | grep "disconnected from the Management service"
+# 02:26:15 02:46:39 03:07:37 03:27:55 03:48:29 04:09:30 04:30:25 04:51:01 ...
+```
 
-- **Wifi stays associated while the cable is in**, giving two default routes on
-  `192.168.1.0/24` — exactly "Docking drops peers onto a relay". It is not
-  cosmetic: the ICE pair in use for the Windows client was
-  `192.168.1.191:51821` (**wifi**) while the default route preferred
-  `enp1s0`, and the kernel logged six `Connection to AP ... lost` /
-  re-associate cycles in 28 hours at **-26 dBm**, which is point-blank signal.
-  Every one of those invalidates a candidate the overlay is using.
-- **Both machines are on the same switch** and the stream still goes through
-  NetBird's ICE. Latency is fine (5.4 ms, `host/host`), but it means a
-  control-plane outage can break a connection between two machines one hop
-  apart.
+hestia shows the **identical** beat — intervals of 20:06 to 21:21 across
+sixteen events. Two different hosts, two independent TCP flows, one metronome.
+A NAT state table does not behave like that; a server-side connection max-age
+does. It is NetBird recycling its own management streams, and both machines
+have been doing it continuously the whole time, including while streaming
+worked fine.
+
+**And it is not even correlated with the drops.** Checked directly against the
+four breaks measured after the `ping_timeout` change:
+
+```
+ICE breaks:            06:01:32  06:07:28  06:09:54  06:21:10
+Management reconnects:           06:04:11                      06:25:15
+```
+
+Four breaks, two reconnects, none of them aligned. The earlier claim in this
+document that the relay-fallback clusters "line up with that 21-minute cadence"
+was pattern-matching on hourly bucket counts, and it did not survive being
+checked at second resolution. **OPNsense needs no changes for any of this.**
 
 **What is mitigated in this repo:** `ping_timeout = 60000` in
 `modules/nixos/remote.nix`. It covers the short renegotiations and nothing more
@@ -752,19 +770,65 @@ Raising `ping_timeout` again would buy nothing.
 So the lesson is about where the fix has to live, not about the number: a
 3-minute hole in the data path cannot be papered over at either endpoint.
 
-#### Why the overlay is the wrong path for this stream at all
+#### THE CAUSE: two addresses on one subnet, so ICE runs on guesses
 
-The restored endpoint, every single time, is `192.168.1.223:51822` — the
-client's **LAN** address. Both machines are on `192.168.1.0/24`, one switch
-apart. NetBird is not providing reach here, only encryption and a control plane
-that fails every 21 minutes; the packets were already going directly.
+Three commands, run while docked and streaming:
 
-Also worth noting for the churn itself: the resets arrive as `OnRemoteOffer`
-while ICE was `Connected`, which means the **client** is re-offering and
-forcing renegotiation — 19 remote offers today, 8 of which landed on a live
-path. The Windows client runs NetBird **0.78.1** against **0.82.0** on both
-NixOS machines, so bringing it up to parity is the cheapest thing to try before
-anything structural.
+```bash
+ss -ulnp | grep 51821        # 0.0.0.0:51821            — ONE unbound socket
+netbird status -d            # ICE local: 192.168.1.191 — wlp2s0, WIFI
+ip route get 192.168.1.223   # dev enp1s0 src 192.168.1.241 — ETHERNET
+```
+
+NetBird has a single UDP socket bound to `0.0.0.0`. The machine holds two
+addresses on `192.168.1.0/24`, and the route to the client prefers the Ethernet
+one (metric 100 against 600). So NetBird gathers and **signals a host candidate
+on the wifi address**, while every packet the kernel actually sends **leaves
+from the Ethernet address**.
+
+The peer therefore receives traffic from an address that was never signalled,
+and files it as peer-reflexive. That is visible, and it is the tell to look for
+next time:
+
+```
+ICE candidate (Local/Remote): host/prflx     <- NOT host/host, on one LAN
+```
+
+An ICE pair built on a reflexive guess instead of the signalled candidates does
+not settle. It re-validates, fails, restarts — every few minutes, forever, and
+with no dependence on the control plane, which is exactly why the breaks line
+up with nothing. Each restart resets the WireGuard endpoint and relays until a
+new path is agreed, giving the 33 s / 129 s / 180 s / 31 s holes above.
+
+It also explains the two observations that previously looked like separate
+problems. The resets arriving as `OnRemoteOffer` are the *other* end reacting to
+the same asymmetry, not a Windows-side fault — so the 0.78.1-vs-0.82.0 version
+gap is almost certainly a red herring; it is worth closing on general
+principle, but it is not this. And "docking drops peers onto a relay", recorded
+much earlier in this file as a separate curiosity, is this same bug seen from
+the other side: plugging in the cable is what creates the second address.
+
+**Fixed in `modules/nixos/laptop.nix`:** `DEVICES_TO_DISABLE_ON_LAN_CONNECT`
+and `DEVICES_TO_ENABLE_ON_LAN_DISCONNECT`, which stand the wifi radio down
+while a cable is connected. TLP's Radio Device Wizard already installs the
+NetworkManager dispatcher hook that does this — `services.tlp.enable` puts
+`/etc/NetworkManager/dispatcher.d/99tlp-rdw-nm` in place — and both of its
+device lists simply default to empty, so this was one setting away the whole
+time. The module comment carries the full reasoning and the failsafe that keeps
+it safe on a travelling laptop.
+
+**Verify it worked** — not from the absence of complaints, which is how two
+wrong diagnoses survived this long:
+
+```bash
+ip -4 -br addr show to 192.168.1.0/24   # want ONE line, not two
+netbird status -d | grep -A4 apollo     # want host/host, local 192.168.1.241
+journalctl -u netbird --since "1 hour ago" | grep -c "ICE disconnected"
+```
+
+The last number was running at about 20 a day. If it does not fall sharply,
+this diagnosis is wrong too and the `host/prflx` reading is the thing to
+re-examine.
 
 **A switch does not apply it — Sunshine is a USER unit.**
 `switch-to-configuration` rewrites `/etc/systemd/user/sunshine.service` to
@@ -782,36 +846,38 @@ systemctl --user show sunshine -p ExecStart --value   # want the NEW sunshine.co
 The same trap applies to every `services.sunshine.settings` change, which is
 why it is here and not in a commit message.
 
-**What is left, reordered after the measurement above:**
+#### Applying the fix, and the one-off step it needs
 
-1. **Update NetBird on the Windows client** from 0.78.1 to 0.82.0. It is the
-   side sending the offers that break the path, it costs nothing, and it is the
-   only remaining step with no trade-off attached. Do this first.
-2. **Find what kills a keepalive'd TCP flow every 21 minutes**, at the gateway
-   or the router it is double-NATed behind. Still the root cause, and the only
-   fix that reduces the churn rather than surviving it.
-3. **Stop running wifi and Ethernet on one subnet** — raise the wifi metric or
-   have NetworkManager drop it while the cable is up.
-4. **Let Moonlight reach `192.168.1.241` directly at home.** Promoted from
-   "only if those fail", because 1-3 all reduce the *frequency* of a hole in
-   the path and this is the only option that removes the hole from the stream's
-   path entirely. It is also the one with a real cost, so it is a decision
-   rather than a task:
+The TLP hook is **event-driven**: it acts on a NetworkManager interface up/down
+event and does not reconcile existing state. So a `switch` on a machine that is
+*already* docked and dual-homed changes nothing until the next cable event.
 
-   The ports would have to open on a physical NIC, which `my.remote`
-   deliberately refuses (see "The firewall trusts the whole overlay"). Scoping
-   it to the interface is not enough — a hotel Ethernet jack is also `enp1s0`
-   — so it would be scoped to the **source subnet**, something like a
-   `my.remote.lanClients = [ "192.168.1.0/24" ]` option defaulting to `[]`,
-   opening 47984/47989/48010 TCP and 47998-48002/48010 UDP and deliberately
-   **not** 47990, so the web UI stays `origin_web_ui_allowed = "pc"`.
+```bash
+sudo nixos-rebuild switch --flake .#zagreus
+nmcli radio wifi off      # once, to reach the state the hook will now maintain
+```
 
-   The residual exposure is a foreign network that also uses
-   `192.168.1.0/24`, which is common. There, the ports become reachable but a
-   stream still is not: Sunshine requires a PIN-paired client certificate, so
-   an unpaired peer gets refused at the handshake. That is the trade to accept
-   or decline — reachable-but-unusable ports on some café networks, in
-   exchange for a stream that no overlay outage can interrupt.
+That second line **drops the live Moonlight session**, because the ICE pair in
+use is the one on the wifi address. It comes back on the Ethernet address and
+should then stay. From then on it is automatic: unplug re-enables the radio,
+plug in stands it down.
+
+#### Deliberately NOT done
+
+- **Nothing on OPNsense.** The 21-minute Management reconnect is normal and
+  hestia does it identically; the static-port outbound NAT rules are correct
+  and unrelated. There was no gateway fault here at any point.
+- **`my.remote.lanClients` — opening Sunshine's ports on a physical NIC** so
+  Moonlight could reach `192.168.1.241` directly and skip the overlay
+  entirely. This was drafted as the durable answer *while the cause was still
+  unknown*, and it is worth recording why it was then dropped rather than
+  shipped: it was a workaround for ICE instability, and the ICE instability had
+  a cause that is fixable without opening anything. Taking the exposure —
+  ports reachable from any foreign `192.168.1.0/24`, which is a common subnet
+  — to route around a bug one setting away from being fixed is a bad trade.
+  Reconsider only if `host/prflx` persists with a single address on the subnet.
+- **Raising `ping_timeout` further.** 60 s stays as a cushion for short
+  renegotiations; see above for why no host-side number is a fix.
 
 ### Waking it again
 

@@ -470,7 +470,8 @@ in
         # Moonlight) holds the session open for up to a minute, delaying
         # Sunshine's return to idle. It is a mitigation and not a fix; the fix
         # is to stop routing a same-LAN stream through the overlay at all. See
-        # docs/REMOTE.md, "Moonlight drops are NetBird path churn".
+        # docs/REMOTE.md, "Moonlight drops: two addresses on one subnet made
+        # ICE run on guesses", and the fix itself in modules/nixos/laptop.nix.
         ping_timeout = 60000;
       }
       // lib.optionalAttrs (cfg.capture == "wlr") {

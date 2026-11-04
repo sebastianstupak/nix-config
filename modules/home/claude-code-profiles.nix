@@ -24,7 +24,7 @@
 # it is the only `claude` installed (dev.nix deliberately does not install
 # pkgs.claude-code), there is no second binary to reach around it.
 #
-# It also refuses to start on an account mismatch — see `account` below. That is
+# It also refuses to start on an account mismatch — see `accounts` below. That is
 # the part that makes "separate subscription" a guarantee rather than a habit:
 # logging into the work tree with the personal account stops being a thing you
 # can do without noticing.
@@ -57,7 +57,7 @@ let
         ${lib.escapeShellArg profile.directory}/*)
           profile_name=${lib.escapeShellArg name}
           config_dir=${lib.escapeShellArg profile.configDir}
-          want_account=${lib.escapeShellArg (if profile.account == null then "" else profile.account)}
+          want_accounts=${lib.escapeShellArg (lib.concatStringsSep " " profile.accounts)}
           ;;
       esac
     ''
@@ -90,7 +90,7 @@ let
 
       profile_name=""
       config_dir=""
-      want_account=""
+      want_accounts=""
 
       ${profileMatch}
       if [ -n "$config_dir" ]; then
@@ -100,27 +100,37 @@ let
         # Claude Code records the signed-in account in <config dir>/.claude.json.
         # An empty value means "never logged in here yet", which has to be
         # allowed or there would be no way to perform the first login.
-        if [ -n "$want_account" ]; then
+        if [ -n "$want_accounts" ]; then
           have=""
           if [ -r "$config_dir/.claude.json" ]; then
             have=$(jq -r '.oauthAccount.emailAddress // empty' "$config_dir/.claude.json" 2>/dev/null || true)
           fi
-          if [ -n "$have" ] && [ "$have" != "$want_account" ]; then
+          # Membership by `case` rather than a loop over an unquoted
+          # $want_accounts: $have sits inside a quoted span of the pattern, so a
+          # glob character in the stored address is matched literally instead of
+          # matching whichever entry it happens to cover. Addresses cannot
+          # contain a space, which is what makes the space-joined list safe to
+          # search this way.
+          allowed=no
+          case " $want_accounts " in
+            *" $have "*) allowed=yes ;;
+          esac
+          if [ -n "$have" ] && [ "$allowed" = no ]; then
             cat >&2 <<EOF
       claude: refusing to start — wrong account for the '$profile_name' profile.
 
-        expected:  $want_account
         signed in: $have
+        accepted:  $want_accounts
         config:    $config_dir
 
-      Everything under this directory is meant to run on that account's
-      subscription. Sign the profile in again:
+      Everything under this directory is meant to run on a subscription this
+      profile owns. Sign the profile in again:
 
         cd $here && claude
         /login
 
-      or, if the expected address is the stale one, correct
-      my.claude.profiles.$profile_name.account in nix-config.
+      or, if the accepted list is the stale one, correct
+      my.claude.profiles.$profile_name.accounts in nix-config.
       EOF
             exit 1
           fi
@@ -173,17 +183,26 @@ let
           '';
         };
 
-        account = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          example = "alice@acme.com";
+        accounts = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          example = [ "alice@acme.com" ];
           description = ''
-            Email address this profile must be signed in as. `claude` refuses to
-            start in `directory` when the profile is signed into anything else,
-            which is what keeps the tree on the intended subscription.
+            Email addresses this profile may be signed in as. `claude` refuses
+            to start in `directory` when the profile is signed into anything
+            outside this list, which is what keeps the tree on the intended
+            subscription.
 
-            Leave null until the first login — there is nothing to compare
-            against yet — then set it to the address `/status` reports.
+            A list rather than one address because a profile can legitimately
+            hold more than one login — a dedicated agent account and the
+            operator's own, say. They share the one config dir, so this accepts
+            several identities for the tree; it does not split the tree's
+            history, memory or MCP state per account. What the check still
+            guarantees is the thing it exists for: no account from outside the
+            list, and no session outside `directory` on this subscription.
+
+            Leave empty until the first login — there is nothing to compare
+            against yet — then list the address(es) `/status` reports.
           '';
         };
 

@@ -100,18 +100,31 @@
   # How the switch is enforced, and why it is a PATH wrapper rather than a
   # direnv .envrc: modules/home/claude-code-profiles.nix.
   my.claude.profiles.nettify = {
-    # The address `/status` reports in that tree. While this was unset, any
+    # The addresses `/status` may report in that tree. While this was empty, any
     # account was accepted there — there is nothing to compare against before a
     # login has happened, so the wrapper routed by directory but refused
     # nothing. Set, `claude` refuses to start under ~/dev/nettify signed in as
     # anyone else, which is what stops that work from quietly landing on the
     # personal subscription (or the reverse).
     #
+    # Two addresses, not one, and the order is meaningful only to a reader: the
+    # dedicated agent account first because that is the canonical one the tree's
+    # own bootstrap tells you to log in as, then the operator's own. Both are
+    # nettify addresses on the nettify subscription, and both share this one
+    # config dir — so this is two accepted identities for the tree, not two
+    # profiles. Pinning only the first is what produced `claude: refusing to
+    # start` on a tree that was legitimately signed in as the second.
+    #
     # The tree's own agent harness checks this independently (its account-lock
-    # hook reads the signed-in address out of the profile's own state), so the
-    # two are deliberately redundant: the hook catches a mis-login inside a
-    # session, this refuses to start one at all.
-    account = "sebastian.ai@nettify.com";
+    # hook reads the signed-in address out of the profile's own state and holds
+    # the same allowlist in tools/nettify-profile.sh), so the two are
+    # deliberately redundant: the hook catches a mis-login inside a session,
+    # this refuses to start one at all. Keep the two lists in step — this one is
+    # the harder lock, and it is outside that repo, so it wins.
+    accounts = [
+      "sebastian.ai@nettify.com"
+      "sebastian.stupak@nettify.com"
+    ];
 
     # Work-only MCP servers. They live in this profile's own .claude.json, so
     # Linear is reachable from every repo under ~/dev/nettify and from nowhere

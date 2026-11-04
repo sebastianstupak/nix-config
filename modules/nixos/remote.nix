@@ -456,13 +456,21 @@ in
         # in. Apollo's peer counters show 11 of those relay fallbacks in 29
         # hours of uptime.
         #
-        # 60 s covers the worst gap seen. This treats the symptom deliberately —
-        # the fallback itself is a gateway problem (docs/REMOTE.md, "Moonlight
-        # drops are NetBird path churn") — but a renegotiation the protocol
-        # recovers from on its own should cost a stutter, not the session. The
-        # cost is that a client which genuinely vanished (closed lid, killed
-        # Moonlight) holds the session open for up to a minute, which only
-        # delays Sunshine returning to its idle state.
+        # 60 s DOES NOT cover the worst gap, and raising it further would not
+        # help. Four renegotiations measured after this was applied: 33 s,
+        # 129 s, 180 s, 31 s — so the 56 s sample above was the good case, not
+        # the bad one. More importantly the host is no longer the side that
+        # gives up: all four sessions ended as a clean `CLIENT DISCONNECTED`,
+        # meaning Moonlight on the client timed out first, and no host-side
+        # value can out-wait that.
+        #
+        # Kept anyway, because it is still strictly better than 10 s — it covers
+        # the short renegotiations, which are the majority — and the only cost
+        # is that a client which genuinely vanished (closed lid, killed
+        # Moonlight) holds the session open for up to a minute, delaying
+        # Sunshine's return to idle. It is a mitigation and not a fix; the fix
+        # is to stop routing a same-LAN stream through the overlay at all. See
+        # docs/REMOTE.md, "Moonlight drops are NetBird path churn".
         ping_timeout = 60000;
       }
       // lib.optionalAttrs (cfg.capture == "wlr") {

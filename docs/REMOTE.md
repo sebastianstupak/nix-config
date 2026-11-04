@@ -724,12 +724,47 @@ cause, both make it worse:
   control-plane outage can break a connection between two machines one hop
   apart.
 
-**What is fixed in this repo:** `ping_timeout = 60000` in
-`modules/nixos/remote.nix`, covering the worst gap measured. That is
-symptomatic on purpose — a renegotiation the protocols recover from by
-themselves should cost a stutter, not the session. Note the margin: 60 s
-against a 56 s worst case, so a longer-than-usual renegotiation will still end
-a session. The symptom to expect now is a freeze that recovers, not a drop.
+**What is mitigated in this repo:** `ping_timeout = 60000` in
+`modules/nixos/remote.nix`. It covers the short renegotiations and nothing more
+— see the measurement below, which falsified the margin this paragraph used to
+claim.
+
+#### 60 s was not enough, and no host-side number is
+
+Applied and restarted 05:50. Four renegotiations in the half hour that
+followed, measured from `reset wg endpoint` to the next
+`configure WireGuard endpoint`:
+
+```
+06:01:32 -> 06:02:05   33s
+06:07:28 -> 06:09:37  129s
+06:09:54 -> 06:12:54  180s
+06:21:10 -> 06:21:41   31s
+```
+
+The 56-second sample this was sized against was the *good* case. Worse, the
+host stopped being the side that gives up: `Ping Timeout` vanished from the
+Sunshine log entirely, and all four sessions ended as
+`Info: CLIENT DISCONNECTED` — a **clean, client-initiated** close. Moonlight
+timed out on its own and hung up, and no value on this side can out-wait that.
+Raising `ping_timeout` again would buy nothing.
+
+So the lesson is about where the fix has to live, not about the number: a
+3-minute hole in the data path cannot be papered over at either endpoint.
+
+#### Why the overlay is the wrong path for this stream at all
+
+The restored endpoint, every single time, is `192.168.1.223:51822` — the
+client's **LAN** address. Both machines are on `192.168.1.0/24`, one switch
+apart. NetBird is not providing reach here, only encryption and a control plane
+that fails every 21 minutes; the packets were already going directly.
+
+Also worth noting for the churn itself: the resets arrive as `OnRemoteOffer`
+while ICE was `Connected`, which means the **client** is re-offering and
+forcing renegotiation — 19 remote offers today, 8 of which landed on a live
+path. The Windows client runs NetBird **0.78.1** against **0.82.0** on both
+NixOS machines, so bringing it up to parity is the cheapest thing to try before
+anything structural.
 
 **A switch does not apply it — Sunshine is a USER unit.**
 `switch-to-configuration` rewrites `/etc/systemd/user/sunshine.service` to
@@ -747,17 +782,36 @@ systemctl --user show sunshine -p ExecStart --value   # want the NEW sunshine.co
 The same trap applies to every `services.sunshine.settings` change, which is
 why it is here and not in a commit message.
 
-**What is left, in order:**
+**What is left, reordered after the measurement above:**
 
-1. Find what kills a keepalive'd TCP flow every 21 minutes, at the gateway.
-   This is the root cause and the only fix that reduces the churn itself.
-2. Stop running wifi and Ethernet on one subnet — raise the wifi metric or
+1. **Update NetBird on the Windows client** from 0.78.1 to 0.82.0. It is the
+   side sending the offers that break the path, it costs nothing, and it is the
+   only remaining step with no trade-off attached. Do this first.
+2. **Find what kills a keepalive'd TCP flow every 21 minutes**, at the gateway
+   or the router it is double-NATed behind. Still the root cause, and the only
+   fix that reduces the churn rather than surviving it.
+3. **Stop running wifi and Ethernet on one subnet** — raise the wifi metric or
    have NetworkManager drop it while the cable is up.
-3. Only if those fail: let Moonlight reach `192.168.1.241` directly at home
-   and skip the overlay. It would be immune to all of the above, but it means
-   opening 47984-48010 on a physical NIC, which `my.remote` deliberately does
-   not do — so it needs to be conditional on the network, and that condition
-   is the hard part.
+4. **Let Moonlight reach `192.168.1.241` directly at home.** Promoted from
+   "only if those fail", because 1-3 all reduce the *frequency* of a hole in
+   the path and this is the only option that removes the hole from the stream's
+   path entirely. It is also the one with a real cost, so it is a decision
+   rather than a task:
+
+   The ports would have to open on a physical NIC, which `my.remote`
+   deliberately refuses (see "The firewall trusts the whole overlay"). Scoping
+   it to the interface is not enough — a hotel Ethernet jack is also `enp1s0`
+   — so it would be scoped to the **source subnet**, something like a
+   `my.remote.lanClients = [ "192.168.1.0/24" ]` option defaulting to `[]`,
+   opening 47984/47989/48010 TCP and 47998-48002/48010 UDP and deliberately
+   **not** 47990, so the web UI stays `origin_web_ui_allowed = "pc"`.
+
+   The residual exposure is a foreign network that also uses
+   `192.168.1.0/24`, which is common. There, the ports become reachable but a
+   stream still is not: Sunshine requires a PIN-paired client certificate, so
+   an unpaired peer gets refused at the handshake. That is the trade to accept
+   or decline — reachable-but-unusable ports on some café networks, in
+   exchange for a stream that no overlay outage can interrupt.
 
 ### Waking it again
 

@@ -72,6 +72,19 @@ in
     # let a bare binary bypass the per-directory account enforcement.
     opentofu # infrastructure-as-code (FOSS Terraform fork; the `tofu` CLI)
 
+    # Azure CLI — read-only estate inspection (role assignments, container apps,
+    # log-analytics queries) that `tofu` cannot answer because it only ever sees
+    # what is in state. Here rather than in a devshell because `az` keeps its
+    # login, subscription and extensions in ~/.azure: a per-repository shell
+    # would re-authenticate on every entry and still write to that same home.
+    #
+    # EXTENSIONS ARE NOT PART OF THIS PACKAGE and cannot be. `az containerapp`,
+    # which is what the Container Apps estate actually needs, is an extension az
+    # installs at runtime into ~/.azure/cliextensions — the nix store is
+    # read-only, so it lands in the home directory either way:
+    #   az extension add --name containerapp
+    azure-cli
+
     # language toolchains (baseline — prefer per-project devshells)
     go
     rustc

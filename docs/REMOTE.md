@@ -1090,6 +1090,22 @@ mentioned above, they are not relevant." Specifically:
 - **`avahi::entry_group_new() failed: Not permitted`** is Sunshine noticing it
   may not advertise itself over mDNS, and carrying on. That is the intended
   state — see the mDNS note above.
+- **`Device does not support encoding av1!` / `Could not open codec
+  [av1_vulkan]`** — the AMD counterpart of the Raptor Lake entry above. Renoir
+  has no AV1 encoder, so the Vulkan probe fails and `h264_vulkan` is chosen,
+  which is what the session actually uses ("Vulkan encode using GPU: AMD Radeon
+  Graphics (RADV RENOIR)").
+- **`Invalid value at rbsp_stop_one_bit` / `Failed to read unit 4 (type 12)` /
+  `Couldn't read packet`**, always as a trio, once per encoder init — ffmpeg
+  parsing the trailing SEI of the probe bitstream Sunshine just generated. It
+  is emitted on every successful session start on `zagreus`, which is the
+  reason it is written down: it appears *immediately before* a stream that then
+  works perfectly, so it reads like the cause of a drop and is not.
+- **`Couldn't find monitor [0]`**, two or three times at startup, followed by
+  `Monitor 0 is eDP-1: …` — the KMS backend enumerating cards. It probes
+  `/dev/dri/card0` (the display-less node) before `card1`, finds nothing, and
+  says so. The `Monitor 0 is …` line a second later is the one that tells you
+  capture is healthy.
 - **Black frames are an Nvidia problem**, not a Hyprland one: the `wlr` backend
   cannot read Nvidia's tiled framebuffer layout. Neither machine *renders* on
   one — `hestia`'s RTX A500 has no display outputs wired to it and its driver

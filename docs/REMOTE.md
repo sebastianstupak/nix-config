@@ -655,6 +655,92 @@ that is scoped to `LAN net` and keyed on the WireGuard source port, so a new
 LAN address changes nothing. But there *was* an OPNsense problem, pre-existing
 and affecting wifi too; the cable only added a second broken default route.
 
+### Moonlight drops are NetBird path churn, and the IPv6 fix did not end them
+
+The section above was necessary and is not sufficient. IPv6 is genuinely fixed
+— `curl -6` fails in milliseconds, NetBird's relay dials to IPv6 literals now
+return `network is unreachable` instantly instead of hanging — and sessions
+**still** died afterwards: `100.94.116.120: Ping Timeout` at 2026-11-04 01:23.
+
+**What actually kills a session.** The P2P path to the client is torn down and
+rebuilt, and Sunshine gives up during the gap. One drop, timestamped from
+`journalctl -u netbird` and `~/.config/sunshine/sunshine.log`:
+
+```
+01:22:58  ICE disconnected, set Relay to active connection   (netbird)
+01:22:58  reset wg endpoint                                  (netbird)
+01:23:24  100.94.116.120: Ping Timeout                       (sunshine)  <- 26s in
+01:23:54  configure WireGuard endpoint to: 86.49.241.18:51614 (netbird)  <- 56s hole
+```
+
+Sunshine's `ping_timeout` defaults to **10000 ms**, so a hole this size is not
+survivable; nothing about the stream was wrong. The counters say how often it
+happens — `netbird status` is silent about history, the periodic peer dumps are
+not:
+
+```bash
+journalctl -u netbird --since today | grep "Dump stat" | tail -3
+# apollo, 29h uptime: P2PConnected: 19, SwitchToRelay: 11, SentOffer: 240
+```
+
+**Eleven relay fallbacks in 29 hours**, and about 20 `ICE disconnected` events
+per day across all peers. Each one is a chance to lose a session, which is why
+this reads as "Moonlight disconnects a lot" rather than as a single fault.
+
+**The trigger, and it is on a clock.** The Management stream dies every ~21
+minutes, all day, 154 times since this boot:
+
+```bash
+journalctl -u netbird --since today | grep "disconnected from the Management service"
+# 00:08:27 00:29:28 00:50:55 01:11:45 01:32:43 01:53:39 02:14:28 02:35:26 ...
+# Reason: rpc error: code = Unavailable desc = keepalive ping failed to receive ACK within timeout
+```
+
+Losing the control plane makes the client re-handshake **every** peer — the
+`SentOffer: 240` against `RemoteOffer: 22` is the asymmetry that proves this
+machine is the churning side, not the Windows box — and each re-handshake drops
+to relay first and re-gathers ICE second. The relay-fallback clusters line up
+with that 21-minute cadence to within a minute or two.
+
+A keepalive ping that gets no ACK is a path problem, not a NetBird bug: gRPC
+sends its own keepalives, so the flow is never idle, and something in front of
+it is still dropping the TCP state. The source address in the reconnect errors
+is `192.168.1.241` — the **Ethernet** address — so this is not the wifi. Next
+place to look is a state/connection lifetime on OPNsense, or on the router it
+is double-NATed behind (see the WAN-is-`192.168.0.81` note above).
+
+**Two aggravating factors, both already documented above.** Neither is the
+cause, both make it worse:
+
+- **Wifi stays associated while the cable is in**, giving two default routes on
+  `192.168.1.0/24` — exactly "Docking drops peers onto a relay". It is not
+  cosmetic: the ICE pair in use for the Windows client was
+  `192.168.1.191:51821` (**wifi**) while the default route preferred
+  `enp1s0`, and the kernel logged six `Connection to AP ... lost` /
+  re-associate cycles in 28 hours at **-26 dBm**, which is point-blank signal.
+  Every one of those invalidates a candidate the overlay is using.
+- **Both machines are on the same switch** and the stream still goes through
+  NetBird's ICE. Latency is fine (5.4 ms, `host/host`), but it means a
+  control-plane outage can break a connection between two machines one hop
+  apart.
+
+**What is fixed in this repo:** `ping_timeout = 60000` in
+`modules/nixos/remote.nix`, covering the worst gap measured. That is
+symptomatic on purpose — a renegotiation the protocols recover from by
+themselves should cost a stutter, not the session.
+
+**What is left, in order:**
+
+1. Find what kills a keepalive'd TCP flow every 21 minutes, at the gateway.
+   This is the root cause and the only fix that reduces the churn itself.
+2. Stop running wifi and Ethernet on one subnet — raise the wifi metric or
+   have NetworkManager drop it while the cable is up.
+3. Only if those fail: let Moonlight reach `192.168.1.241` directly at home
+   and skip the overlay. It would be immune to all of the above, but it means
+   opening 47984-48010 on a physical NIC, which `my.remote` deliberately does
+   not do — so it needs to be conditional on the network, and that condition
+   is the hard part.
+
 ### Waking it again
 
 **ZAGREUS IS NOT HESTIA HERE, and the section above gets it wrong.** Point 3

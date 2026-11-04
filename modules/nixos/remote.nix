@@ -440,6 +440,30 @@ in
         # connection that already exists sidesteps the question and keeps the
         # admin interface off the wire entirely. docs/REMOTE.md has the command.
         origin_web_ui_allowed = "pc";
+
+        # Ride through a NetBird path renegotiation instead of dying in it.
+        #
+        # Sunshine's default is 10000 ms, and that is tuned for a LAN where a
+        # 10-second silence really does mean the client is gone. This stream
+        # runs over the overlay, where it does not: NetBird's control plane on
+        # zagreus loses its Management stream roughly every 21 minutes
+        # (`keepalive ping failed to receive ACK within timeout`), re-handshakes
+        # every peer, and the already-negotiated ICE path to the client drops to
+        # a Frankfurt relay until a new one is agreed. Measured on 2026-11-04:
+        # ICE went down at 01:22:58, the replacement WireGuard endpoint was in
+        # place at 01:23:54 — a 56-second hole, during which Moonlight was
+        # logged off at 01:23:24 with `100.94.116.120: Ping Timeout`, 26 seconds
+        # in. Apollo's peer counters show 11 of those relay fallbacks in 29
+        # hours of uptime.
+        #
+        # 60 s covers the worst gap seen. This treats the symptom deliberately —
+        # the fallback itself is a gateway problem (docs/REMOTE.md, "Moonlight
+        # drops are NetBird path churn") — but a renegotiation the protocol
+        # recovers from on its own should cost a stutter, not the session. The
+        # cost is that a client which genuinely vanished (closed lid, killed
+        # Moonlight) holds the session open for up to a minute, which only
+        # delays Sunshine returning to its idle state.
+        ping_timeout = 60000;
       }
       // lib.optionalAttrs (cfg.capture == "wlr") {
         # Compositor output names only mean something to the wlr backend — see

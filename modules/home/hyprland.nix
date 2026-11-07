@@ -59,128 +59,47 @@
       ];
 
       input = {
-        # TWO LAYOUTS, AND THE ACTIVE ONE IS PER KEYBOARD DEVICE — which is why
-        # "sometimes the Alt+Shift toggle doesn't work". The chord itself is
-        # fine; it switches THE KEYBOARD IT WAS PRESSED ON and no other.
+        # TWO LAYOUTS AND A CAPS LOCK, AND HYPRLAND KEEPS ALL THREE PER
+        # KEYBOARD DEVICE. That is the whole bug behind both "caps lock is on
+        # every time I connect over Moonlight" and "sometimes the Alt+Shift
+        # toggle doesn't work" — one cause, two symptoms.
         #
-        # Measured on zagreus 2026-11-07 with a uinput keyboard: Alt+Shift on
-        # it moved that device from `active layout index: 0` to `1`, while
-        # `at-translated-set-2-keyboard`, `zagreus-(mcs)` and
-        # `libvirtualhid-keyboard` all stayed at `0`. Same per-device design as
-        # the caps lock below (`onKeyboardMod` takes `MODS.group` from the
-        # event-source keyboard only), so this is one root cause with two
-        # symptoms. The chord is NOT the fragile part: all four press/release
-        # orderings of Alt+Shift toggle correctly, and `<LALT>`/`<LFSH>` carry
-        # `ISO_Next_Group` on their level-2 symbol, so either key completes it.
+        # Nothing here fixes it, because nothing here can: the divergence is
+        # between DEVICES, and this file configures the keymap they all share.
+        # The fix is to leave the machine with only one keyboard device, which
+        # is modules/nixos/keyboard.nix — read that for the mechanism, the
+        # upstream issues and the measurements. These two lines are then
+        # ordinary again, and are left exactly as they were.
         #
-        # So you can be on SK at the laptop and US through Moonlight at the
-        # same time, and a newly created keyboard — Sunshine's virtual one on
-        # every `systemctl --user restart sunshine` — starts at index 0
-        # regardless of what everything else is on.
+        # WHAT WAS TRIED AND REVERTED, so it is not tried twice: `caps:none`.
+        # It works, and it is the wrong fix. Removing `modifier_map Lock {
+        # <CAPS> }` from the keymap does make a divergent lock state
+        # unreachable rather than merely unlikely — verified by diffing
+        # `xkbcli compile-keymap` output, and end-to-end against a uinput
+        # keyboard where CapsLock then arrived as `sym: VoidSymbol` and letters
+        # stayed lowercase. But it buys that by deleting the key, and Caps Lock
+        # is in regular use here. Disabling a working key to dodge a compositor
+        # bug is not the trade; merging the devices is.
         #
-        # WAYBAR THEN MAKES IT LOOK RANDOM. `hyprland/language` is configured
-        # without `keyboard-name` (modules/home/waybar.nix), and waybar's
-        # language.cpp treats that as "accept the `activelayout` event from ANY
-        # keyboard", while `initLanguage()` seeds from the FIRST keyboard in
-        # `hyprctl devices` — here `video-bus`, which will never switch. So the
-        # bar reports whichever device last changed, not the one you are typing
-        # on; press the chord, watch the bar not move, press it again, and now
-        # you have switched twice.
+        # `grp:alt_shift_toggle` is NOT the fragile part either, despite how it
+        # feels. All four press/release orderings of Alt+Shift toggle
+        # correctly, because `<LALT>` and `<LFSH>` each carry `ISO_Next_Group`
+        # on their level-2 symbol, so whichever is pressed second completes it.
+        # Two things made it look unreliable: the switch only applied to the
+        # keyboard it was pressed on, and waybar's `hyprland/language` has no
+        # `keyboard-name` (modules/home/waybar.nix), which its language.cpp
+        # reads as "accept the activelayout event from ANY keyboard" while
+        # `initLanguage()` seeds from the FIRST keyboard in `hyprctl devices` —
+        # `video-bus`, which never switches. So the bar reported a device you
+        # were not typing on; you pressed the chord again, and switched twice.
         #
-        # The lever for a fix is `hyprctl switchxkblayout all <index>`, which
-        # converges every device. NOTE `all next` DOES NOT — it advances each
-        # device's own index, so it preserves divergence rather than ending it.
-        # Verified both ways.
+        # One more trap worth knowing when checking any of this: `hyprctl
+        # devices` prints `m_modifiersState`, a CACHE refreshed only by the next
+        # event FROM THAT DEVICE. A keyboard nobody has touched keeps reporting
+        # a lock that is already gone. The honest instrument is what a client
+        # actually receives — `nix shell nixpkgs#wev --command wev`.
         kb_layout = "us,sk";
-
-        # `caps:none` BECAUSE A CAPS LOCK STATE CANNOT BE KEPT IN SYNC OVER
-        # MOONLIGHT, and the symptom was "caps is on every time I connect".
-        # Alt+Shift cycles US <-> SK (Windows-style) as before.
-        #
-        # The lock state is not one state. Hyprland gives EVERY keyboard device
-        # its own `xkb_state`, and the state handed to the focused window is the
-        # one belonging to the device that sent the key — `onKeyboardMod` copies
-        # `pKeyboard->m_modifiersState` and only OR-merges the DEPRESSED field
-        # across devices (`shareModsFromAllKBs`); `locked` is never merged, and
-        # `getModifiers()` deliberately returns `depressed | latched` only. So
-        # the laptop keyboard and Sunshine's virtual one hold independent,
-        # invisible caps locks. Reported upstream twice —
-        # hyprwm/Hyprland#3897 and #9560 — and BOTH ARE CLOSED AS NOT PLANNED,
-        # so there is no fix to wait for.
-        #
-        # Which makes Moonlight the worst case, for three reasons that compound:
-        #
-        # 1. Sunshine's uinput keyboard (`libvirtualhid-keyboard` in
-        #    `hyprctl devices`) is created once when sunshine.service starts,
-        #    not per stream. Measured on zagreus 2026-11-07: one device, alive
-        #    3 days, across six CLIENT CONNECTED/DISCONNECTED pairs. Its caps
-        #    lock is therefore whatever the LAST session left it as.
-        # 2. Moonlight never tells the host otherwise. moonlight-qt's
-        #    app/streaming/input/keyboard.cpp forwards Caps Lock as a plain
-        #    keypress (VK 0x14) and has no KMOD_CAPS handling at all — it
-        #    sends the TOGGLE, never the STATE. The client's own caps lock is
-        #    tracked by Windows and resets independently every time you leave
-        #    the stream, so the two drift apart by design.
-        # 3. The LED cannot tell you which one is on. `updateKeyboardsLeds`
-        #    pushes the event-source keyboard's LEDs to every keyboard, so the
-        #    laptop's caps light reflects whichever device typed last — and
-        #    with nobody at the laptop, it is dark while the virtual keyboard
-        #    is locked.
-        #
-        # Net effect: a sticky toggle you cannot see, cannot query from the
-        # client, and can only guess at by typing a letter. Pressing it again
-        # from Moonlight fixes it until the next drift.
-        #
-        # `caps:none` removes the possibility rather than making it less
-        # likely, the same move as `my.remote.capture = "kms"`: with no lock
-        # action in the keymap, no device can enter a locked state, so there is
-        # nothing left to desynchronise. Moonlight may forward VK 0x14 forever
-        # and it does nothing. Shift still capitalises; in Neovim `gU`/`~` are
-        # the better tools for a run of capitals anyway.
-        #
-        # The guarantee is visible in the compiled keymap, which is the reason
-        # to prefer this over anything that merely intercepts the key. Diffing
-        # `xkbcli compile-keymap --layout us,sk --options …` with and without
-        # `caps:none` gives exactly three changes: the keymap's name, <CAPS>
-        # becoming `type="ONE_LEVEL", symbols[1]=[VoidSymbol]`, and — the
-        # load-bearing one — `modifier_map Lock { <CAPS> };` DISAPPEARING. With
-        # no key mapped to the Lock modifier, a locked state is unreachable
-        # rather than merely unlikely. Everything else is byte-identical,
-        # including both layout groups and all five LockGroup/SetGroup actions,
-        # so `grp:alt_shift_toggle` is untouched.
-        #
-        # Verified end-to-end 2026-11-07 against a uinput keyboard driven
-        # through the same kernel -> libinput -> Hyprland path Sunshine's
-        # libvirtualhid uses, with `wev` reading what a real client receives.
-        # Before: one CapsLock tap, and `a` arrived as `sym: A, utf8: 'A'`.
-        # After: CapsLock arrives as `sym: VoidSymbol`, letters stay lowercase
-        # across further taps, Shift+a still gives `A`, and Shift+CapsLock
-        # cannot sneak a lock in either.
-        #
-        # If the key is wanted back, `caps:escape_shifted_capslock` keeps a
-        # REAL Caps Lock behind Shift+Caps Lock (and makes the bare key Esc),
-        # which is deliberate enough that it cannot drift by accident.
-        # `numpad:mac` is the num-lock half of the same bug (it is what #9560
-        # settled on) — not set here because nothing has complained about it.
-        #
-        # APPLYING THIS CLEARS ANY LOCK ALREADY STUCK, so there is no cleanup
-        # step and no logout — but only because it CHANGES the option string.
-        # `applyConfigToKeyboard` returns early when the rules are unchanged
-        # ("Not applying config to keyboard, it did not change"), and only the
-        # changed path reaches `setKeymap` -> `updateXKBTranslationState` ->
-        # `xkb_state_new`, which is a fresh state with no locks. The block that
-        # would restore the old locked mods afterwards is gated behind
-        # `input:numlock_by_default`, which is 0 here, so nothing puts them
-        # back. Measured: with the cache still reporting `capsLock: yes`, the
-        # first letter after the change arrived lowercase.
-        #
-        # So do not trust `hyprctl devices` for this. It prints
-        # `m_modifiersState.locked`, a CACHE that is only refreshed by the next
-        # event from that device — a keyboard nobody has touched since the
-        # change keeps reporting a lock that is no longer there. See
-        # docs/REMOTE.md for reading it without being misled.
-        kb_options = "grp:alt_shift_toggle,caps:none";
-
+        kb_options = "grp:alt_shift_toggle"; # Alt+Shift cycles US <-> SK (Windows-style)
         follow_mouse = 1;
         touchpad.natural_scroll = true;
       };

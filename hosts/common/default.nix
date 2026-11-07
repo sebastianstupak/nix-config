@@ -17,6 +17,7 @@
     ./hardware-configuration.nix
     ../../modules/nixos # baseline (core)
     ../../modules/nixos/desktop.nix # Hyprland graphical session
+    ../../modules/nixos/keyboard.nix # one caps lock / layout across all keyboards
     ../../modules/nixos/stylix.nix # system-wide theming (Kanagawa)
     ../../modules/nixos/laptop.nix # power, bluetooth, firmware, backlight
     ../../modules/nixos/power.nix # battery thresholds, lid, hibernation (docs/POWER.md)
@@ -53,6 +54,22 @@
   # machine reachable from every other; the mechanism and the reasoning about
   # scoping it to the overlay live in modules/nixos/remote.nix, and the
   # first-time pairing walkthrough in docs/REMOTE.md.
+  # The keyboards that must share ONE caps lock, num lock and layout. Both
+  # machines are laptops whose built-in keyboard hangs off i8042, so the ID is
+  # the same generic `0001:0001` on each; Sunshine's uinput keyboard is
+  # `1209:0002` wherever it runs. Hence common rather than per-host.
+  #
+  # These two, and no others, because they are the two anyone types on — which
+  # is exactly the pair that was diverging. See modules/nixos/keyboard.nix for
+  # why `*` is the wrong answer and what it would drag in.
+  #
+  # Verify after any hardware change with:
+  #   grep -B4 'Vendor=' /proc/bus/input/devices | grep -E 'Name=|Vendor='
+  my.keyboard.mergeIds = [
+    "0001:0001" # AT Translated Set 2 keyboard — the built-in one
+    "1209:0002" # libvirtualhid Keyboard — what Moonlight types through
+  ];
+
   my.remote = {
     enable = true;
 

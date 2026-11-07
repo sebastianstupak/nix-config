@@ -1147,54 +1147,72 @@ written back**. Every setting has to come from `services.sunshine.settings` in
 Pairing state is different and does persist — it lives in
 `~/.config/sunshine/sunshine_state.json`, not in the config file.
 
-### Caps Lock arrived on every session, and the LED could not tell you
+### Caps Lock and the layout did not follow you between keyboards
 
 **Symptom:** you connect with Moonlight, start typing, and everything is in
 capitals. Pressing Caps Lock on the client fixes it for that session; next time
-it is back. The laptop's own Caps Lock light says nothing either way.
+it is back. The laptop's own Caps Lock light says nothing either way. Same cause
+makes the Alt+Shift US/SK toggle look intermittent.
 
-**Cause** is in `modules/home/hyprland.nix` (`kb_options`) in full, but the
-short version: Hyprland keeps a *separate* caps-lock state per keyboard device
-and hands the focused window the state of whichever device sent the key. The
-device Moonlight types through — Sunshine's uinput keyboard,
-`libvirtualhid-keyboard` — is created once when `sunshine.service` starts and
-outlives every stream, so it carries whatever the last session left. Moonlight
-forwards the Caps Lock *keypress* and never the *state*, so the client has no
-way to tell the host it disagrees. And the caps LED is pushed from the
-event-source keyboard, so with nobody at the laptop it stays dark while the
-virtual keyboard is locked.
+**Cause:** Hyprland keeps caps lock, num lock *and* the active layout **per
+keyboard device**, and hands the focused window the state of whichever device
+sent the key. This machine has two keyboards whether you like it or not — the
+built-in one, and the uinput keyboard Sunshine creates for Moonlight
+(`libvirtualhid-keyboard`, made once when `sunshine.service` starts and
+outliving every stream). So you can be caps-locked over Moonlight and not at the
+laptop, or on SK at the laptop and US over Moonlight, at the same time. Moonlight
+forwards the Caps Lock *keypress* and never the *state*, so the client cannot
+tell the host it disagrees. Full mechanism, source references and measurements:
+`modules/nixos/keyboard.nix`.
 
-**Fixed** by `caps:none` in `kb_options`: with no lock action in the keymap no
-device can hold a caps-lock state at all. Upstream has closed both reports of
-the per-device behaviour (hyprwm/Hyprland#3897, #9560) as not planned.
+Upstream has closed both reports of the per-device behaviour
+(hyprwm/Hyprland#3897, #9560) as not planned, and it is still unfixed in
+0.56/0.57. Hyprland also exposes no dispatcher that could set a keyboard's lock
+state from outside — `hyprctl switchxkblayout all <index>` converges the layout
+(`all next` does **not**; it advances each device's own index), but there is no
+equivalent for locks.
 
-**Nothing to clean up afterwards.** Applying the change also clears whatever is
-already stuck, because changing the option string is what triggers
-`setKeymap` → a fresh `xkb_state` with no locks, and the block that would
-restore the old locked mods is gated behind `input:numlock_by_default` (`0`
-here). One `nixos-rebuild switch` is enough; no logout, no reboot, no pressing
-Caps Lock on the laptop first.
+**Fixed** by removing the second keyboard: `services.keyd` grabs the two devices
+anyone types on and re-emits both through one virtual keyboard, so the
+compositor sees a single keyboard with a single caps lock, num lock and layout.
+Declared as `my.keyboard.mergeIds` in `hosts/common/default.nix`. keyd is used
+purely as a multiplexer — `[main]` is empty and every keycode passes through
+untouched, so xkb still owns the layout exactly as before.
 
-**Do not trust `hyprctl devices` for this.** It prints `m_modifiersState`, a
-cache refreshed only by the next event *from that device*, so a keyboard nobody
-has touched since the change goes on reporting a lock that is already gone:
+`caps:none` was tried first and reverted. It does make a divergent lock
+unreachable, but it does so by deleting the key, and Caps Lock is in regular use
+here.
+
+**Checking it:**
 
 ```bash
-# Per-device lock state — CACHED, can be stale. Tap a key on the device in
-# question first if you want its line to mean anything.
-hyprctl devices | sed -n '/^Keyboards:/,$p' | grep -E '^\t\t[a-z]|capsLock|numLock'
+# Should list ONE typing keyboard (keyd's) instead of the built-in plus
+# libvirtualhid-keyboard.
+hyprctl devices | sed -n '/^Keyboards:/,$p' | grep -E '^\t\t[a-z]|capsLock|numLock|layout index'
 
-# The only honest test is what an application receives. This prints the keysym
-# and modifiers as delivered to a real Wayland client:
+systemctl status keyd            # not running => nothing grabbed, old behaviour
+keyd check /etc/keyd/merged.conf # parse the config without applying it
+```
+
+**Do not trust `hyprctl devices` for lock state.** It prints
+`m_modifiersState`, a cache refreshed only by the next event *from that device*,
+so a keyboard nobody has touched goes on reporting a lock that is already gone.
+The only honest test is what an application receives:
+
+```bash
 nix shell nixpkgs#wev --command wev     # focus its window, then type
 ```
 
-The caps LED is no help either — `updateKeyboardsLeds` pushes the *event-source*
-keyboard's LEDs to every keyboard, so it shows the state of whatever typed last.
+The caps LED is a weak witness too — `updateKeyboardsLeds` pushes the
+*event-source* keyboard's LEDs to every keyboard, and the hotkey devices are
+deliberately not merged, so pressing brightness while caps lock is on briefly
+blanks the light until the next letter. The state is correct throughout.
 
-If a lock ever does get stuck under some other keymap, `systemctl --user restart
-sunshine` recreates the virtual keyboard clean (drops any live stream), and a
-fresh login rebuilds every keyboard from scratch.
+**If keyd ever strands the keyboard**, it does not take SSH with it: the overlay
+route does not pass through keyd, so `sudo nixos-rebuild switch --rollback` is
+always reachable from another machine. And keyd grabs nothing unless it starts
+with a valid config, so a failure to start degrades to the old behaviour rather
+than to no keyboard.
 
 ### The rest
 

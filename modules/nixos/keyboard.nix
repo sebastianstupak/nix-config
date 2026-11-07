@@ -179,5 +179,23 @@ in
         settings.main = { };
       };
     };
+
+    # GRAB BEFORE THE COMPOSITOR EVER SEES THESE DEVICES, which is what makes
+    # the clean-start property in the header reliable instead of incidental.
+    #
+    # The phantom lock documented above can only form in one window: a keyboard
+    # that takes a lock while Hyprland is still receiving its events, and is
+    # then grabbed, freezing that state in `m_modifiersState` where every
+    # focus-enter will OR it into what windows are told. keyd is already
+    # `wantedBy = multi-user.target` and so normally starts well before the
+    # session, but nothing SAID so — and the one boot where that ordering
+    # happens not to hold would reintroduce a phantom that no keypress can
+    # clear afterwards.
+    #
+    # greetd rather than display-manager.service: this host's login manager is
+    # `services.greetd` (modules/nixos/desktop.nix), which defines greetd.service
+    # and no display-manager.service at all, so ordering against the latter
+    # would be a no-op that merely looked careful.
+    systemd.services.keyd.before = [ "greetd.service" ];
   };
 }

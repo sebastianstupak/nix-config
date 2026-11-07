@@ -2,6 +2,7 @@
 {
   config,
   lib,
+  osConfig,
   pkgs,
   ...
 }:
@@ -53,6 +54,25 @@ in
       # credential helpers through a plain shell that need not have the user
       # profile on PATH.
       credential."https://github.com".helper = "!${pkgs.gh}/bin/gh auth git-credential";
+
+      # Same idea for the self-hosted Forgejo, but there is no `gh` for it and
+      # SSH is disabled on the instance, so HTTPS + a stored PAT is the only
+      # way in. `git-credential-netrc` ships inside git itself; the netrc it
+      # reads is rendered from sops (hosts/common/default.nix sops.templates).
+      #
+      # WITHOUT THIS, EVERY FETCH AND PUSH OPENS A GUI PASSWORD PROMPT. The
+      # fall-through is not a terminal prompt but SSH_ASKPASS — set to
+      # ssh-askpass-pinentry by security.nix, with SSH_ASKPASS_REQUIRE=prefer —
+      # so git asks pinentry for a username and password on every single remote
+      # operation, and `GIT_TERMINAL_PROMPT=0` does NOT suppress it (that only
+      # governs the terminal path). A script that pushes therefore hangs on a
+      # dialog instead of failing, which is the worse of the two outcomes.
+      #
+      # Absolute store path, as with `gh` above: credential helpers run under a
+      # plain shell that need not have the user profile on PATH.
+      credential."https://git.datadir.dev".helper = "!${pkgs.git}/bin/git-credential-netrc -f ${
+        osConfig.sops.templates."forgejo-netrc".path
+      }";
 
       alias = {
         s = "status -sb";

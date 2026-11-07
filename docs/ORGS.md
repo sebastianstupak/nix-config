@@ -164,6 +164,66 @@ Everything except the secrets is reproduced by a rebuild. What is not:
    `~/.ssh/id_ed25519` exists skips it — and git then calls your own commits
    unknown-signer. Make the key, then rebuild once more. See step 9 of
    [INSTALL.md](./INSTALL.md).
+6. **The two datadir tokens, and then a `tea` login.** `git push` to
+   `git.datadir.dev` and `wp` against `ci.datadir.dev` both read their
+   credentials from sops and need nothing else once the values are real — but
+   the values themselves are issued per account, and `tea` additionally keeps
+   its own config file that only it can write. See
+   [Forgejo and Woodpecker credentials](#forgejo-and-woodpecker-credentials).
+
+## Forgejo and Woodpecker credentials
+
+Both hosts are on the `datadir.dev` zone and reachable **only over NetBird** —
+there is no `datadir.co` git or CI host. The instance has SSH disabled, so git
+goes over HTTPS with a PAT.
+
+One secret file holds both tokens, encrypted to both machines:
+
+```bash
+sops secrets/common/forgejo.yaml
+```
+
+- `forgejo-token` — a PAT from <https://git.datadir.dev/user/settings/applications>,
+  scopes `read:user`, `write:repository`, `write:issue` (`tea pr` touches
+  issues). `hosts/common/default.nix` renders it into a netrc that git's
+  credential helper reads, so `git fetch`/`push` stop prompting.
+- `woodpecker-token` — a PAT from <https://ci.datadir.dev/user>. The `wp`
+  wrapper in `modules/home/dev.nix` reads it per invocation.
+
+Rebuild, then **prove the netrc rendered before trusting it** — a push is a bad
+place to discover it did not:
+
+```bash
+sudo nixos-rebuild switch --flake .#zagreus
+cat /run/secrets/rendered/forgejo-netrc    # want your PAT, not a placeholder
+git -C ~/dev/datadir/temnir ls-remote origin HEAD   # want a sha, and NO dialog
+wp pipeline ls datadir/temnir | head -3
+```
+
+If `ls-remote` opens a **GUI password prompt**, the helper is not being used:
+git falls through to `SSH_ASKPASS` (pinentry), which `GIT_TERMINAL_PROMPT=0`
+does not suppress. See the comment on `credential."https://git.datadir.dev"` in
+`modules/home/git.nix`.
+
+Then the one step that cannot be declarative:
+
+```bash
+tea logins add -n datadir -u https://git.datadir.dev \
+  -t "$(cat /run/secrets/forgejo-token)"
+```
+
+`tea logins add` validates the token against the live server before writing
+`~/.config/tea/config.yml`, so it cannot run at activation (NetBird may be
+down, and a rejected token writes nothing) — and `tea` ignores
+`GITEA_SERVER_URL`/`GITEA_SERVER_TOKEN` unless a stored login already exists,
+so a credential wrapper like `wp`'s does not work for it either. Both checked
+against tea 0.14. Reading the token from `/run/secrets` rather than typing it
+keeps it out of shell history. Confirm with `tea logins list`.
+
+Finally, **the datadir commit address has to be verified on the Forgejo
+account** (<https://git.datadir.dev/user/settings/account>): repos under
+`~/dev/datadir` author as `sebastian.stupak@datadir.co`, and an unverified
+address makes those commits belong to no user in the web UI.
 
 Everything else — directories, git rules, profile directories with their MCP
 servers, workspace rules, bar glyphs — is there after the first rebuild.
@@ -178,10 +238,12 @@ and a hand-added MCP server.
   new one starts empty. `herdr session list` shows both; `herdr session stop
   <old>` then `herdr session delete <old>` clears it out. Checked, including
   that a stopped session stays listed until it is deleted.
-- **One identity for every org right now.** All four use the same address, so
-  the per-org git rules are in place but currently resolve to the same answer.
-  If an org ever needs its own — a GitHub org enforcing a verified domain, a CLA
-  checking the author — it is one line, and nothing else moves.
+- **Two identities, not four.** `datadir` authors as
+  `sebastian.stupak@datadir.co`; the other three share the personal address. So
+  the per-org rules now resolve to different answers, which is what they are
+  for — but it also means a repo cloned to the wrong tree gets the wrong
+  author, and only says so after a push. `git -C <repo> config user.email`
+  before the first commit in a new checkout.
 - **herdr is pinned to a release tag**, not a branch, unlike every other flake
   input. It owns live session state, and an input bump that silently moved it
   would restart the server under whatever was running. Bumping it is a

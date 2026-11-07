@@ -189,7 +189,18 @@
     in
     {
       datadir = {
-        email = me;
+        # The one org with an address of its own: datadir s.r.o. is a company,
+        # and its commits should say so rather than carrying a personal mailbox
+        # into a company history. This is exactly the case the per-org rules in
+        # modules/home/git.nix exist for, and turning it on is this one line.
+        #
+        # THE ADDRESS MUST BE VERIFIED ON THE FORGEJO ACCOUNT at
+        # https://git.datadir.dev/user/settings/account, or commits authored
+        # with it show as belonging to no user — the avatar and the link go
+        # missing, and `tea pr` attribution follows. Signatures are unaffected:
+        # allowed_signers is regenerated from my.orgs at activation, so one key
+        # keeps verifying for both identities.
+        email = "sebastian.stupak@datadir.co";
         workspaces = [
           4
           5

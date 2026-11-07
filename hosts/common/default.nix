@@ -295,6 +295,41 @@
       key = "personal-url";
       owner = "sebastianstupak";
     };
+
+    # The self-hosted Forgejo / Woodpecker PATs. Same reasons as the calendar
+    # feeds above for living here rather than in a home-manager module, and for
+    # `owner`: git's credential helper and the `wp` wrapper both run as the user.
+    forgejo-token = {
+      sopsFile = ../../secrets/common/forgejo.yaml;
+      owner = "sebastianstupak";
+    };
+    woodpecker-token = {
+      sopsFile = ../../secrets/common/forgejo.yaml;
+      owner = "sebastianstupak";
+    };
+  };
+
+  # git's credential helper wants a FILE in netrc syntax, not a token, so the
+  # file is rendered from the PAT above rather than stored as a second copy of
+  # it. One secret, two consumers — rotate `forgejo-token` and both move.
+  #
+  # `sops.placeholder.<name>` is substituted at activation, not at build time:
+  # the template's CONTENT here goes into the nix store, so a literal token
+  # would be world-readable in /nix/store. The placeholder is what keeps it out.
+  #
+  # Rendered templates land in /run/secrets/rendered/, not /run/secrets/ — read
+  # the path from `config.sops.templates."forgejo-netrc".path` rather than
+  # assuming, which is what modules/home/git.nix does.
+  #
+  # Only git.datadir.dev needs a line. Woodpecker is not a git remote; its
+  # token goes to `wp` through the environment instead (modules/home/dev.nix).
+  sops.templates."forgejo-netrc" = {
+    owner = "sebastianstupak";
+    content = ''
+      machine git.datadir.dev
+        login sebastianstupak
+        password ${config.sops.placeholder.forgejo-token}
+    '';
   };
 
   # home-manager runs as a NixOS module: one `nixos-rebuild switch` manages the

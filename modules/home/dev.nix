@@ -1,7 +1,7 @@
 # Development tooling. Per-project toolchains still come from `nix develop` +
 # nix-direnv (the reproducible way); the language packages below are a small
 # always-available baseline for quick, throwaway work.
-{ pkgs, ... }:
+{ osConfig, pkgs, ... }:
 let
   # ONE dotnet ROOT HOLDING BOTH SDKs, not two packages. dotnet-sdk_10 and
   # dotnet-sdk_8 each install bin/dotnet, so listing both collides at profile
@@ -45,6 +45,40 @@ let
   # (4.7.2.stable.mono) because Godot looks the directory up by that exact
   # name and silently offers to download when it is absent.
   godotTemplates = pkgs.godotPackages_4_7.export-templates-mono-bin;
+
+  # THE WOODPECKER CLI UNDER THE NAME THE TOOLING ACTUALLY CALLS IT. The package
+  # installs two names and `woodpecker` prints "calling `woodpecker` is
+  # deprecated, use `woodpecker-cli`" on stderr, so exec the latter; every
+  # runbook and script in the
+  # temnir repo says `wp` — tools/ci/pr-wait.sh resolves it with `command -v wp`
+  # and otherwise falls back to a stale `~/bin/wp.exe` from a WSL era. A shell
+  # ALIAS cannot fix that: `task ci:watch` runs the script through plain sh,
+  # where aliases do not exist. Only a real binary on PATH works from both.
+  #
+  # The wrapper also supplies the credentials rather than the session exporting
+  # them. WOODPECKER_TOKEN in `home.sessionVariables` would sit in the
+  # environment of every process on the machine — one `cat /proc/<pid>/environ`
+  # from any of them — and would still be the value captured at login, so a
+  # rotated token needs a new session. Reading the sops path per invocation
+  # costs nothing and has neither problem.
+  #
+  # Both are overridable: an already-set WOODPECKER_SERVER/TOKEN wins, so a
+  # second instance or a short-lived token can be used without editing this.
+  wp = pkgs.writeShellScriptBin "wp" ''
+    set -eu
+    : "''${WOODPECKER_SERVER:=https://ci.datadir.dev}"
+    export WOODPECKER_SERVER
+    if [ -z "''${WOODPECKER_TOKEN:-}" ]; then
+      tokenFile=${osConfig.sops.secrets.woodpecker-token.path}
+      if [ -r "$tokenFile" ]; then
+        WOODPECKER_TOKEN="$(cat "$tokenFile")"
+        export WOODPECKER_TOKEN
+      else
+        echo "wp: no token at $tokenFile — is the secret declared and the machine rebuilt?" >&2
+      fi
+    fi
+    exec ${pkgs.woodpecker-cli}/bin/woodpecker-cli "$@"
+  '';
 in
 {
   programs.direnv = {
@@ -65,6 +99,21 @@ in
     # tools
     gh # GitHub CLI
     lazygit # terminal git UI
+
+    # Forgejo CLI — `tea`, how pull requests on git.datadir.dev are managed.
+    # The instance has SSH disabled and no web access worth scripting, so
+    # `tea pr create/list/merge` is the only PR path; see the temnir repo's
+    # CLAUDE.md, which mandates it over a browser.
+    #
+    # UNLIKE EVERY OTHER CREDENTIAL HERE, tea's cannot be made declarative.
+    # `tea logins add` VALIDATES the token against the live server before it
+    # writes ~/.config/tea/config.yml, so it cannot run at activation (NetBird
+    # may be down, and a rejected token writes nothing) — and tea ignores
+    # GITEA_SERVER_URL/TOKEN unless a stored login already exists, so a wrapper
+    # like `wp` below would not work either. Both verified against tea 0.14.
+    # It is therefore a one-time manual step per machine: docs/ORGS.md.
+    tea
+    wp # the Woodpecker CLI, renamed + credentialed — see above
     gnumake
     # No claude-code here on purpose. The `claude` on PATH is the profile
     # wrapper from modules/home/claude-code-profiles.nix, which execs this same
@@ -84,6 +133,21 @@ in
     # read-only, so it lands in the home directory either way:
     #   az extension add --name containerapp
     azure-cli
+
+    # Teleport client — `tsh`, the bastion the estate is reached through. Here
+    # rather than in a devshell for the same reason as azure-cli: `tsh` keeps
+    # its cluster profile and short-lived certificates in ~/.tsh, so a
+    # per-repository shell would re-login on every entry and still write to
+    # that same home.
+    #
+    # THE UNVERSIONED ATTR IS A MOVING MAJOR — it is teleport_18 (18.10.0) in
+    # this nixpkgs, alongside teleport_16/_17. A Teleport client must be no
+    # older than the cluster's advertised `min_client_version` and no newer
+    # than its major; so when a `tsh login` starts refusing on version, read
+    # the real numbers from the cluster rather than guessing:
+    #   curl -s https://<proxy>/webapi/ping | jq '{server_version, min_client_version}'
+    # and pin `teleport_<major>` here if the alias has drifted past it.
+    teleport
 
     # language toolchains (baseline — prefer per-project devshells)
     go

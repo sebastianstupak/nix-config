@@ -244,6 +244,19 @@ and a hand-added MCP server.
   for — but it also means a repo cloned to the wrong tree gets the wrong
   author, and only says so after a push. `git -C <repo> config user.email`
   before the first commit in a new checkout.
+
+  **Under `~/dev/datadir` BOTH addresses are permitted**, and `datadir.co` is
+  only the default, not a restriction. Nothing enforces one: no hook inspects
+  the author (the only hooks are the AI-attribution stripper and
+  `prepare-commit-msg`), `allowed_signers` carries both so one key verifies
+  either, and both are verified on the Forgejo account. To author a datadir
+  repo as the personal address, set it on that repo — local config beats the
+  `includeIf`:
+
+      git -C <repo> config user.email sebastian.stupak@pm.me
+
+  Checked rather than assumed: commits made both ways in a scratch repo under
+  that tree each report `%G?` = `G`, a good signature.
 - **herdr is pinned to a release tag**, not a branch, unlike every other flake
   input. It owns live session state, and an input bump that silently moved it
   would restart the server under whatever was running. Bumping it is a

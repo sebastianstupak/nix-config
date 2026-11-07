@@ -1147,6 +1147,45 @@ written back**. Every setting has to come from `services.sunshine.settings` in
 Pairing state is different and does persist — it lives in
 `~/.config/sunshine/sunshine_state.json`, not in the config file.
 
+### Caps Lock arrived on every session, and the LED could not tell you
+
+**Symptom:** you connect with Moonlight, start typing, and everything is in
+capitals. Pressing Caps Lock on the client fixes it for that session; next time
+it is back. The laptop's own Caps Lock light says nothing either way.
+
+**Cause** is in `modules/home/hyprland.nix` (`kb_options`) in full, but the
+short version: Hyprland keeps a *separate* caps-lock state per keyboard device
+and hands the focused window the state of whichever device sent the key. The
+device Moonlight types through — Sunshine's uinput keyboard,
+`libvirtualhid-keyboard` — is created once when `sunshine.service` starts and
+outlives every stream, so it carries whatever the last session left. Moonlight
+forwards the Caps Lock *keypress* and never the *state*, so the client has no
+way to tell the host it disagrees. And the caps LED is pushed from the
+event-source keyboard, so with nobody at the laptop it stays dark while the
+virtual keyboard is locked.
+
+**Fixed** by `caps:none` in `kb_options`: with no lock action in the keymap no
+device can hold a caps-lock state at all. Upstream has closed both reports of
+the per-device behaviour (hyprwm/Hyprland#3897, #9560) as not planned.
+
+**If one is stuck right now**, the config change alone will not clear it, and
+afterwards no keypress can either. What to do, cheapest first:
+
+```bash
+# What each device actually holds. Note this prints Hyprland's CACHED value,
+# which can lag the real xkb state after a config reload.
+hyprctl devices | sed -n '/^Keyboards:/,$p' | grep -E '^\t\t[a-z]|capsLock|numLock'
+
+# The virtual keyboard only: destroying and recreating the uinput device gives
+# it a clean state. Drops any live stream — reconnect after.
+systemctl --user restart sunshine
+```
+
+For the built-in keyboard, press Caps Lock on the laptop itself **before**
+switching to `caps:none`, or just log out and back in — a fresh session builds
+every keyboard from scratch. A `nixos-rebuild switch` is *not* enough: Hyprland
+rebuilds the keymap on reload but does not re-derive the lock state from it.
+
 ### The rest
 
 - **The overlay is not implicitly trusted by the firewall.** With

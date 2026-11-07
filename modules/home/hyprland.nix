@@ -60,7 +60,64 @@
 
       input = {
         kb_layout = "us,sk";
-        kb_options = "grp:alt_shift_toggle"; # Alt+Shift cycles US <-> SK (Windows-style)
+
+        # `caps:none` BECAUSE A CAPS LOCK STATE CANNOT BE KEPT IN SYNC OVER
+        # MOONLIGHT, and the symptom was "caps is on every time I connect".
+        # Alt+Shift cycles US <-> SK (Windows-style) as before.
+        #
+        # The lock state is not one state. Hyprland gives EVERY keyboard device
+        # its own `xkb_state`, and the state handed to the focused window is the
+        # one belonging to the device that sent the key — `onKeyboardMod` copies
+        # `pKeyboard->m_modifiersState` and only OR-merges the DEPRESSED field
+        # across devices (`shareModsFromAllKBs`); `locked` is never merged, and
+        # `getModifiers()` deliberately returns `depressed | latched` only. So
+        # the laptop keyboard and Sunshine's virtual one hold independent,
+        # invisible caps locks. Reported upstream twice —
+        # hyprwm/Hyprland#3897 and #9560 — and BOTH ARE CLOSED AS NOT PLANNED,
+        # so there is no fix to wait for.
+        #
+        # Which makes Moonlight the worst case, for three reasons that compound:
+        #
+        # 1. Sunshine's uinput keyboard (`libvirtualhid-keyboard` in
+        #    `hyprctl devices`) is created once when sunshine.service starts,
+        #    not per stream. Measured on zagreus 2026-11-07: one device, alive
+        #    3 days, across six CLIENT CONNECTED/DISCONNECTED pairs. Its caps
+        #    lock is therefore whatever the LAST session left it as.
+        # 2. Moonlight never tells the host otherwise. moonlight-qt's
+        #    app/streaming/input/keyboard.cpp forwards Caps Lock as a plain
+        #    keypress (VK 0x14) and has no KMOD_CAPS handling at all — it
+        #    sends the TOGGLE, never the STATE. The client's own caps lock is
+        #    tracked by Windows and resets independently every time you leave
+        #    the stream, so the two drift apart by design.
+        # 3. The LED cannot tell you which one is on. `updateKeyboardsLeds`
+        #    pushes the event-source keyboard's LEDs to every keyboard, so the
+        #    laptop's caps light reflects whichever device typed last — and
+        #    with nobody at the laptop, it is dark while the virtual keyboard
+        #    is locked.
+        #
+        # Net effect: a sticky toggle you cannot see, cannot query from the
+        # client, and can only guess at by typing a letter. Pressing it again
+        # from Moonlight fixes it until the next drift.
+        #
+        # `caps:none` removes the possibility rather than making it less
+        # likely, the same move as `my.remote.capture = "kms"`: with no lock
+        # action in the keymap, no device can enter a locked state, so there is
+        # nothing left to desynchronise. Moonlight may forward VK 0x14 forever
+        # and it does nothing. Shift still capitalises; in Neovim `gU`/`~` are
+        # the better tools for a run of capitals anyway.
+        #
+        # If the key is wanted back, `caps:escape_shifted_capslock` keeps a
+        # REAL Caps Lock behind Shift+Caps Lock (and makes the bare key Esc),
+        # which is deliberate enough that it cannot drift by accident.
+        # `numpad:mac` is the num-lock half of the same bug (it is what #9560
+        # settled on) — not set here because nothing has complained about it.
+        #
+        # NOTE THIS DOES NOT CLEAR A LOCK THAT IS ALREADY SET, and afterwards
+        # there is no key left that could. Hyprland rebuilds `xkb_state` on a
+        # config reload but keeps reporting the stale cached value, and only a
+        # NEW device object really starts clean. See docs/REMOTE.md.
+        kb_options = "grp:alt_shift_toggle,caps:none";
+
         follow_mouse = 1;
         touchpad.natural_scroll = true;
       };

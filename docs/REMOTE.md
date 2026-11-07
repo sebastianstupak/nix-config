@@ -1183,6 +1183,38 @@ untouched, so xkb still owns the layout exactly as before.
 unreachable, but it does so by deleting the key, and Caps Lock is in regular use
 here.
 
+**A second, separate bug produces the symptom you actually notice** — caps
+appearing on the moment you connect, and one window disagreeing with another.
+`CSeatManager::setKeyboardFocus` ORs *every* keyboard's **cached** locked state
+into the modifiers it sends a newly focused surface. A keyboard with a stale
+cache therefore tells every window "Caps Lock is down" as it takes focus, and
+the window believes it until a real modifier event arrives — so you type
+capitals "until it starts working", and two windows hold different answers.
+
+Caches go stale *because of* the merge: `m_modifiersState` is refreshed only by
+events from that device, and a grabbed keyboard never sends Hyprland another
+one. Whatever was in the cache when keyd first grabbed it is frozen there.
+
+This is self-correcting from a clean start — with keyd already running, Hyprland
+builds each grabbed keyboard with a zeroed cache and nothing can change it. But
+clearing one that is *already* frozen needs a new device object. A keymap change
+does not do it (`updateXKBTranslationState` makes a fresh `xkb_state` and never
+touches the cache). Either log out and back in, or re-create the device node and
+keep the session:
+
+```bash
+echo -n serio0 | sudo tee /sys/bus/serio/drivers/atkbd/unbind
+echo -n serio0 | sudo tee /sys/bus/serio/drivers/atkbd/bind
+```
+
+Spot a phantom by looking for a keyboard with a lock set that you are not typing
+on:
+
+```bash
+hyprctl devices -j | jq -r '.keyboards[] | select(.capsLock or .numLock)
+  | "\(.name) caps=\(.capsLock) num=\(.numLock) main=\(.main)"'
+```
+
 **Checking it:**
 
 ```bash

@@ -58,6 +58,65 @@
 # over the Netbird overlay (modules/nixos/remote.nix) does not pass through
 # keyd at all, so `nixos-rebuild switch --rollback` is always reachable.
 #
+# AND THERE IS A SECOND BUG, which is the one that actually produces "caps lock
+# is on every time I connect" and "I set caps on in one pane and it is off in
+# this one". It is NOT the per-device divergence above, and merging the devices
+# does not fix it by itself.
+#
+# `CSeatManager::setKeyboardFocus` ORs EVERY keyboard's CACHED locked state into
+# the modifiers it hands the newly focused surface:
+#
+#   uint32_t locked = m_keyboard->m_modifiersState.locked;
+#   for (auto const& kb : g_pInputManager->m_keyboards) { ... locked |= kb->m_modifiersState.locked; }
+#   k->sendMods(depressed, latched, locked, m_keyboard->m_modifiersState.group);
+#
+# So one keyboard with a stale cache tells EVERY window, every time it takes
+# focus, that Caps Lock is down. The window then believes that until a real
+# modifier event arrives, because `sendKeyboardKey` does not resend mods and
+# `onKeyboardMod` only fires when modifiers actually change. Which is exactly
+# "it doesn't work right away" — you type capitals until you happen to press a
+# modifier — and exactly why two windows disagree: each holds whatever it was
+# last told.
+#
+# Measured on zagreus 2026-11-07 with `wev` focused: on enter it received
+# `locked: 00000012: Lock Mod2` while `keyd-virtual-keyboard` reported
+# `capsLock: no, numLock: no`. Mod2 is Num Lock, and nothing else on the machine
+# had it set, so it can only have come from `at-translated-set-2-keyboard`'s
+# frozen `caps=True num=True`.
+#
+# WHAT MAKES A CACHE STALE IS THIS MODULE. `m_modifiersState` is refreshed only
+# by `updateModifiersState()`, which runs on events FROM that device. Once keyd
+# grabs a keyboard, Hyprland never receives another event from it, so whatever
+# was in that cache at the moment of the grab is frozen there permanently. A
+# laptop keyboard that had Caps Lock on when keyd first started will inject a
+# phantom Caps Lock into every window, forever.
+#
+# It is therefore self-correcting ONLY from a clean start: with keyd already
+# running, Hyprland builds each grabbed keyboard with `m_modifiersState` zeroed
+# and nothing can ever change it, so no phantom can form. The order matters, not
+# the config.
+#
+# CLEARING ONE THAT IS ALREADY FROZEN NEEDS A NEW DEVICE OBJECT. A keymap change
+# does NOT do it — `updateXKBTranslationState` builds a fresh `xkb_state` but
+# never touches `m_modifiersState`, and the block that would re-derive it is
+# gated behind `input:numlock_by_default` (0 here). So `hyprctl keyword
+# input:kb_options ...` clears the live state and leaves the cache lying, which
+# is a trap worth knowing: the live state and the reported state disagree.
+# What works is a fresh login, or destroying and re-creating the device node,
+# which keeps the session:
+#
+#   echo -n serio0 | sudo tee /sys/bus/serio/drivers/atkbd/unbind
+#   echo -n serio0 | sudo tee /sys/bus/serio/drivers/atkbd/bind
+#
+# NOT FIXED with `device { name = ...; enabled = false; }` on the grabbed
+# keyboards, though that would make the phantom structurally impossible — the
+# enter loop skips `!kb->m_enabled`. `onKeyboardKey` also drops events from a
+# disabled keyboard, so a keyd that failed to start would leave this machine
+# with NO working built-in keyboard rather than a working un-merged one. That
+# trades a cosmetic-but-maddening bug for a lockout on a machine that is
+# sometimes only reachable over the network. Not worth it; the clean-start
+# property above covers it.
+#
 # Residual quirk, cosmetic only: `updateKeyboardsLeds` still pushes the
 # event-source keyboard's LEDs to every keyboard, and the hotkey devices above
 # are not merged, so pressing brightness while caps lock is on briefly blanks

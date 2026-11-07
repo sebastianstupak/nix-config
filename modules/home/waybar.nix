@@ -317,6 +317,50 @@ let
   # itself otherwise — the `network` module already covers plain connectivity, so
   # a permanent "VPN: off" chip would be clutter. Flip the early-exit below if you
   # would rather see an explicit off state.
+  # CAPS LOCK, BECAUSE THERE WAS NO WAY TO SEE IT. The only indicator on this
+  # machine was the LED on the laptop's own keyboard, which is exactly the one
+  # thing you cannot see over Moonlight — so remotely the lock state was
+  # unobservable, and "caps is on and I don't know why" had no answer short of
+  # typing a letter to find out. See modules/nixos/keyboard.nix for why the
+  # state used to be wrong as well as invisible.
+  #
+  # Reads the keyboard with `main: true` rather than a device name. That is the
+  # keyboard Hyprland last took an event from, so it is both the one being typed
+  # on and the only one whose `capsLock` is trustworthy: `hyprctl` prints
+  # `m_modifiersState`, a cache refreshed only by events FROM that device, so an
+  # idle keyboard reports a stale lock. Naming `keyd-virtual-keyboard` directly
+  # would read the right device today and go blank the moment keyd is off.
+  #
+  # Self-hiding: empty text when the lock is off, like `systemd-failed-units`
+  # and `privacy`, so it costs no width until it has something to say — which
+  # also makes its appearance the signal, rather than a label you learn to stop
+  # reading.
+  capsScript = pkgs.writeShellApplication {
+    name = "waybar-caps";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      # hyprctl is the session's, found on PATH — adding the Hyprland package to
+      # runtimeInputs here would pull a second copy into the closure for one
+      # binary (same reasoning as modules/nixos/remote.nix).
+      devices=$(hyprctl devices -j 2>/dev/null || echo '{}')
+
+      echo "$devices" | jq -c '
+        (.keyboards // []) | map(select(.main)) | first
+        | if . == null then
+            { text: "", tooltip: "no active keyboard" }
+          elif .capsLock then
+            { text: "CAPS", class: "locked",
+              tooltip: ("Caps Lock on — " + .name) }
+          else
+            { text: "", tooltip: ("Caps Lock off — " + .name) }
+          end
+      '
+    '';
+  };
+
   vpnScript = pkgs.writeShellApplication {
     name = "waybar-vpn";
     runtimeInputs = [
@@ -628,6 +672,10 @@ in
         "temperature"
         "tray"
         "idle_inhibitor"
+        # Next to the layout: both answer "what will this keypress produce",
+        # and both are states you can leave the machine in. Self-hides, so it
+        # does not push the cluster around when the lock is off.
+        "custom/caps"
         "hyprland/language"
         "backlight"
         "wireplumber"
@@ -860,6 +908,16 @@ in
         exec = lib.getExe vpnScript;
         return-type = "json";
         interval = 10;
+      };
+
+      # 1s, which is faster than anything else here and deliberately so: this
+      # answers "am I about to type in capitals", and an answer that arrives
+      # five seconds late is worse than none. Hyprland emits no event for lock
+      # state (only `activelayout` for the layout), so polling is the only way.
+      "custom/caps" = {
+        exec = lib.getExe capsScript;
+        return-type = "json";
+        interval = 1;
       };
 
       # us <-> sk indicator for the Alt+Shift toggle, as an explicit uppercase
@@ -1197,6 +1255,7 @@ in
       #custom-clock,
       #custom-notification,
       #custom-vpn,
+      #custom-caps,
       #privacy,
       #systemd-failed-units,
       #custom-power {
@@ -1277,6 +1336,10 @@ in
       #network.disconnected { color: @base08; }
       #wireplumber.muted { color: @base03; }
       #idle_inhibitor.activated { color: @base0A; }
+      /* Caps Lock only ever renders when it is ON, so the colour is the alarm
+         rather than a state distinction — same amber as the other "you have
+         left this machine in a mode" indicators. */
+      #custom-caps.locked { color: @base0A; }
     '';
   };
 

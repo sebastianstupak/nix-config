@@ -106,16 +106,47 @@
         # and it does nothing. Shift still capitalises; in Neovim `gU`/`~` are
         # the better tools for a run of capitals anyway.
         #
+        # The guarantee is visible in the compiled keymap, which is the reason
+        # to prefer this over anything that merely intercepts the key. Diffing
+        # `xkbcli compile-keymap --layout us,sk --options …` with and without
+        # `caps:none` gives exactly three changes: the keymap's name, <CAPS>
+        # becoming `type="ONE_LEVEL", symbols[1]=[VoidSymbol]`, and — the
+        # load-bearing one — `modifier_map Lock { <CAPS> };` DISAPPEARING. With
+        # no key mapped to the Lock modifier, a locked state is unreachable
+        # rather than merely unlikely. Everything else is byte-identical,
+        # including both layout groups and all five LockGroup/SetGroup actions,
+        # so `grp:alt_shift_toggle` is untouched.
+        #
+        # Verified end-to-end 2026-11-07 against a uinput keyboard driven
+        # through the same kernel -> libinput -> Hyprland path Sunshine's
+        # libvirtualhid uses, with `wev` reading what a real client receives.
+        # Before: one CapsLock tap, and `a` arrived as `sym: A, utf8: 'A'`.
+        # After: CapsLock arrives as `sym: VoidSymbol`, letters stay lowercase
+        # across further taps, Shift+a still gives `A`, and Shift+CapsLock
+        # cannot sneak a lock in either.
+        #
         # If the key is wanted back, `caps:escape_shifted_capslock` keeps a
         # REAL Caps Lock behind Shift+Caps Lock (and makes the bare key Esc),
         # which is deliberate enough that it cannot drift by accident.
         # `numpad:mac` is the num-lock half of the same bug (it is what #9560
         # settled on) — not set here because nothing has complained about it.
         #
-        # NOTE THIS DOES NOT CLEAR A LOCK THAT IS ALREADY SET, and afterwards
-        # there is no key left that could. Hyprland rebuilds `xkb_state` on a
-        # config reload but keeps reporting the stale cached value, and only a
-        # NEW device object really starts clean. See docs/REMOTE.md.
+        # APPLYING THIS CLEARS ANY LOCK ALREADY STUCK, so there is no cleanup
+        # step and no logout — but only because it CHANGES the option string.
+        # `applyConfigToKeyboard` returns early when the rules are unchanged
+        # ("Not applying config to keyboard, it did not change"), and only the
+        # changed path reaches `setKeymap` -> `updateXKBTranslationState` ->
+        # `xkb_state_new`, which is a fresh state with no locks. The block that
+        # would restore the old locked mods afterwards is gated behind
+        # `input:numlock_by_default`, which is 0 here, so nothing puts them
+        # back. Measured: with the cache still reporting `capsLock: yes`, the
+        # first letter after the change arrived lowercase.
+        #
+        # So do not trust `hyprctl devices` for this. It prints
+        # `m_modifiersState.locked`, a CACHE that is only refreshed by the next
+        # event from that device — a keyboard nobody has touched since the
+        # change keeps reporting a lock that is no longer there. See
+        # docs/REMOTE.md for reading it without being misled.
         kb_options = "grp:alt_shift_toggle,caps:none";
 
         follow_mouse = 1;

@@ -1168,23 +1168,33 @@ virtual keyboard is locked.
 device can hold a caps-lock state at all. Upstream has closed both reports of
 the per-device behaviour (hyprwm/Hyprland#3897, #9560) as not planned.
 
-**If one is stuck right now**, the config change alone will not clear it, and
-afterwards no keypress can either. What to do, cheapest first:
+**Nothing to clean up afterwards.** Applying the change also clears whatever is
+already stuck, because changing the option string is what triggers
+`setKeymap` → a fresh `xkb_state` with no locks, and the block that would
+restore the old locked mods is gated behind `input:numlock_by_default` (`0`
+here). One `nixos-rebuild switch` is enough; no logout, no reboot, no pressing
+Caps Lock on the laptop first.
+
+**Do not trust `hyprctl devices` for this.** It prints `m_modifiersState`, a
+cache refreshed only by the next event *from that device*, so a keyboard nobody
+has touched since the change goes on reporting a lock that is already gone:
 
 ```bash
-# What each device actually holds. Note this prints Hyprland's CACHED value,
-# which can lag the real xkb state after a config reload.
+# Per-device lock state — CACHED, can be stale. Tap a key on the device in
+# question first if you want its line to mean anything.
 hyprctl devices | sed -n '/^Keyboards:/,$p' | grep -E '^\t\t[a-z]|capsLock|numLock'
 
-# The virtual keyboard only: destroying and recreating the uinput device gives
-# it a clean state. Drops any live stream — reconnect after.
-systemctl --user restart sunshine
+# The only honest test is what an application receives. This prints the keysym
+# and modifiers as delivered to a real Wayland client:
+nix shell nixpkgs#wev --command wev     # focus its window, then type
 ```
 
-For the built-in keyboard, press Caps Lock on the laptop itself **before**
-switching to `caps:none`, or just log out and back in — a fresh session builds
-every keyboard from scratch. A `nixos-rebuild switch` is *not* enough: Hyprland
-rebuilds the keymap on reload but does not re-derive the lock state from it.
+The caps LED is no help either — `updateKeyboardsLeds` pushes the *event-source*
+keyboard's LEDs to every keyboard, so it shows the state of whatever typed last.
+
+If a lock ever does get stuck under some other keymap, `systemctl --user restart
+sunshine` recreates the virtual keyboard clean (drops any live stream), and a
+fresh login rebuilds every keyboard from scratch.
 
 ### The rest
 

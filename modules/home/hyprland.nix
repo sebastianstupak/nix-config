@@ -59,6 +59,38 @@
       ];
 
       input = {
+        # TWO LAYOUTS, AND THE ACTIVE ONE IS PER KEYBOARD DEVICE — which is why
+        # "sometimes the Alt+Shift toggle doesn't work". The chord itself is
+        # fine; it switches THE KEYBOARD IT WAS PRESSED ON and no other.
+        #
+        # Measured on zagreus 2026-11-07 with a uinput keyboard: Alt+Shift on
+        # it moved that device from `active layout index: 0` to `1`, while
+        # `at-translated-set-2-keyboard`, `zagreus-(mcs)` and
+        # `libvirtualhid-keyboard` all stayed at `0`. Same per-device design as
+        # the caps lock below (`onKeyboardMod` takes `MODS.group` from the
+        # event-source keyboard only), so this is one root cause with two
+        # symptoms. The chord is NOT the fragile part: all four press/release
+        # orderings of Alt+Shift toggle correctly, and `<LALT>`/`<LFSH>` carry
+        # `ISO_Next_Group` on their level-2 symbol, so either key completes it.
+        #
+        # So you can be on SK at the laptop and US through Moonlight at the
+        # same time, and a newly created keyboard — Sunshine's virtual one on
+        # every `systemctl --user restart sunshine` — starts at index 0
+        # regardless of what everything else is on.
+        #
+        # WAYBAR THEN MAKES IT LOOK RANDOM. `hyprland/language` is configured
+        # without `keyboard-name` (modules/home/waybar.nix), and waybar's
+        # language.cpp treats that as "accept the `activelayout` event from ANY
+        # keyboard", while `initLanguage()` seeds from the FIRST keyboard in
+        # `hyprctl devices` — here `video-bus`, which will never switch. So the
+        # bar reports whichever device last changed, not the one you are typing
+        # on; press the chord, watch the bar not move, press it again, and now
+        # you have switched twice.
+        #
+        # The lever for a fix is `hyprctl switchxkblayout all <index>`, which
+        # converges every device. NOTE `all next` DOES NOT — it advances each
+        # device's own index, so it preserves divergence rather than ending it.
+        # Verified both ways.
         kb_layout = "us,sk";
 
         # `caps:none` BECAUSE A CAPS LOCK STATE CANNOT BE KEPT IN SYNC OVER

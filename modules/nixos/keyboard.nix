@@ -26,6 +26,18 @@
 # device's own index and so preserves the divergence), but nothing equivalent
 # exists for locks.
 #
+# AND DO NOT REACH FOR `switchxkblayout` TO FIX A LOCK, because it makes a stale
+# one real. `switchXKBLayoutRequest` sets the group by feeding the CACHED
+# modifier state back through `xkb_state_update_mask`:
+#
+#   KEEB->updateModifiers(KEEB->m_modifiersState.depressed, KEEB->m_modifiersState.latched,
+#                         KEEB->m_modifiersState.locked, requestedLayout);
+#
+# On a keyboard whose cache is stale but whose live `xkb_state` is clean — which
+# is exactly the state a keymap reload leaves behind, see below — that writes the
+# phantom lock INTO the live state. The command is safe for switching layouts
+# and actively harmful as a repair.
+#
 # SO THE FIX IS TO STOP HAVING MORE THAN ONE KEYBOARD. keyd grabs the devices
 # listed below and re-emits everything through a single virtual keyboard, and
 # its man page is explicit that this is a supported use: "All keyboards defined

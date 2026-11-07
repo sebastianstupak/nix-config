@@ -1172,6 +1172,11 @@ state from outside — `hyprctl switchxkblayout all <index>` converges the layou
 (`all next` does **not**; it advances each device's own index), but there is no
 equivalent for locks.
 
+Do **not** reach for `switchxkblayout` to repair a lock: it sets the group by
+feeding the *cached* modifier state back through `xkb_state_update_mask`, so on a
+keyboard with a stale cache it writes the phantom lock into the live state. Fine
+for switching layouts, actively harmful as a fix.
+
 **Fixed** by removing the second keyboard: `services.keyd` grabs the two devices
 anyone types on and re-emits both through one virtual keyboard, so the
 compositor sees a single keyboard with a single caps lock, num lock and layout.
